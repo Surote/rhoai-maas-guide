@@ -11,6 +11,7 @@
 #   Phase 5: Deploy model  - auto-detect GPU, apply model Kustomize
 #   Phase 6: Verify  - run 6-phase E2E verification
 #   Phase 7: Observability (optional)  - COO + Gateway telemetry
+#   Phase 8: External models (optional) - deploy ExternalModel (e.g. OpenAI, Gemini)
 #
 # Each phase is idempotent  - re-running skips what's already done.
 #
@@ -23,6 +24,8 @@
 #   --skip-models        Skip Phase 5 (model deployment)
 #   --skip-verify        Skip Phase 6 (verification)
 #   --with-observability Also run Phase 7 (COO + telemetry)
+#   --with-external-models Also run Phase 8 (ExternalModel deployment)
+#   --external-model-api-key <key>  API key for external provider (or EXTERNAL_MODEL_API_KEY env var)
 #   --dry-run            Preview without applying
 #   -h, --help           Show this help message
 #
@@ -53,6 +56,9 @@ FROM_PHASE=0
 SKIP_MODELS=false
 SKIP_VERIFY=false
 WITH_OBSERVABILITY=false
+WITH_EXTERNAL_MODELS=false
+EXTERNAL_MODEL_PROVIDER="${EXTERNAL_MODEL_PROVIDER:-openai}"
+EXTERNAL_MODEL_API_KEY="${EXTERNAL_MODEL_API_KEY:-}"
 DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
@@ -62,6 +68,9 @@ while [[ $# -gt 0 ]]; do
         --skip-models) SKIP_MODELS=true; shift ;;
         --skip-verify) SKIP_VERIFY=true; shift ;;
         --with-observability) WITH_OBSERVABILITY=true; shift ;;
+        --with-external-models) WITH_EXTERNAL_MODELS=true; shift ;;
+        --external-model-provider) EXTERNAL_MODEL_PROVIDER="$2"; shift 2 ;;
+        --external-model-api-key) EXTERNAL_MODEL_API_KEY="$2"; shift 2 ;;
         --dry-run) DRY_RUN=true; shift ;;
         -h|--help)
             cat <<'EOF'
@@ -73,10 +82,13 @@ idempotent  - re-running skips what's already done.
 
 Options:
   --model <name>       Model: simulator, granite-tiny-gpu, gpt-oss-20b, auto (default: auto)
-  --from-phase <N>     Start from phase N (0-7, default: 0)
+  --from-phase <N>     Start from phase N (0-8, default: 0)
   --skip-models        Skip Phase 5 (model deployment)
   --skip-verify        Skip Phase 6 (verification)
   --with-observability Also run Phase 7 (COO + Gateway telemetry)
+  --with-external-models Also run Phase 8 (ExternalModel deployment + test)
+  --external-model-provider <p>   Provider: openai (default), gemini (or set EXTERNAL_MODEL_PROVIDER)
+  --external-model-api-key <key>  API key for external provider (or set EXTERNAL_MODEL_API_KEY)
   --dry-run            Preview without applying
   -h, --help           Show this help message
 
@@ -89,6 +101,7 @@ Phases:
   5  Deploy model       Auto-detect GPU, apply model Kustomize manifests
   6  Verify             6-phase E2E verification (API, auth, rate limits)
   7  Observability      COO + Gateway telemetry (only with --with-observability)
+  8  External models    ExternalModel + governance (only with --with-external-models)
 
 Auto-detection (--model auto):
   No GPU             -> simulator (CPU-only, ~30s startup)
@@ -223,6 +236,7 @@ should_run 4 && PHASES_TO_RUN="$PHASES_TO_RUN 4"
 should_run 5 && [ "$SKIP_MODELS" = false ] && PHASES_TO_RUN="$PHASES_TO_RUN 5"
 should_run 6 && [ "$SKIP_VERIFY" = false ] && PHASES_TO_RUN="$PHASES_TO_RUN 6"
 should_run 7 && [ "$WITH_OBSERVABILITY" = true ] && PHASES_TO_RUN="$PHASES_TO_RUN 7"
+should_run 8 && [ "$WITH_EXTERNAL_MODELS" = true ] && PHASES_TO_RUN="$PHASES_TO_RUN 8"
 echo ""
 log_info "Phases to run:${PHASES_TO_RUN:- (none)}"
 
@@ -763,6 +777,152 @@ if should_run 7 && [ "$WITH_OBSERVABILITY" = true ]; then
 fi
 
 # =============================================================================
+# Phase 8: External Models (Optional)
+# =============================================================================
+if should_run 8 && [ "$WITH_EXTERNAL_MODELS" = true ]; then
+    log_phase 8 "External Models (provider: ${EXTERNAL_MODEL_PROVIDER})"
+
+    if [ -z "$EXTERNAL_MODEL_API_KEY" ]; then
+        log_warn "No external model API key provided (use --external-model-api-key or EXTERNAL_MODEL_API_KEY env var)"
+        log_warn "Skipping Phase 8"
+    else
+        EXTMODEL_NS="external-models"
+
+        case "$EXTERNAL_MODEL_PROVIDER" in
+            openai)
+                EXTMODEL_NAME="gpt-4o-mini"
+                EXTMODEL_SECRET="openai-api-key"
+                EXTMODEL_SUBSCRIPTION="openai-free"
+                EXTMODEL_TARGET_MODEL="gpt-4o-mini"
+                ;;
+            gemini)
+                EXTMODEL_NAME="gemini-2-5-flash"
+                EXTMODEL_SECRET="gemini-api-key"
+                EXTMODEL_SUBSCRIPTION="gemini-free"
+                EXTMODEL_TARGET_MODEL="gemini-2.5-flash"
+                ;;
+            *)
+                log_warn "Unknown provider '${EXTERNAL_MODEL_PROVIDER}' (supported: openai, gemini)"
+                log_warn "Skipping Phase 8"
+                EXTERNAL_MODEL_API_KEY=""
+                ;;
+        esac
+
+        if [ -n "$EXTERNAL_MODEL_API_KEY" ]; then
+            PROVIDER_DIR="$MANIFESTS_DIR/08-external-models/${EXTERNAL_MODEL_PROVIDER}"
+
+            if [ ! -d "$PROVIDER_DIR" ]; then
+                log_warn "Manifest directory not found: $PROVIDER_DIR"
+                log_warn "Skipping Phase 8"
+            else
+                # Create namespace
+                log_step "Creating external-models namespace..."
+                if oc get namespace "$EXTMODEL_NS" &>/dev/null; then
+                    log_info "Namespace $EXTMODEL_NS already exists"
+                else
+                    run_cmd oc apply -f "${PROVIDER_DIR}/namespace.yaml"
+                fi
+
+                log_step "Creating provider credential Secret..."
+                if [ "$DRY_RUN" = true ]; then
+                    log_info "[DRY RUN] Would create Secret ${EXTMODEL_SECRET} in $EXTMODEL_NS"
+                else
+                    oc create secret generic "$EXTMODEL_SECRET" \
+                        --from-literal=api-key="$EXTERNAL_MODEL_API_KEY" \
+                        -n "$EXTMODEL_NS" \
+                        --dry-run=client -o yaml | oc apply -f - 2>/dev/null
+                    oc label secret "$EXTMODEL_SECRET" -n "$EXTMODEL_NS" \
+                        inference.networking.k8s.io/bbr-managed=true --overwrite 2>/dev/null
+                    log_info "Secret ${EXTMODEL_SECRET} created/updated (bbr-managed label applied)"
+                fi
+
+                log_step "Applying ExternalModel CR..."
+                run_cmd oc apply -k "${PROVIDER_DIR}/model/"
+
+                log_step "Applying MaaS governance (MaaSModelRef, AuthPolicy, Subscription)..."
+                run_cmd oc apply -k "${PROVIDER_DIR}/maas/"
+
+                if [ "$DRY_RUN" = false ]; then
+                    log_info "Waiting for MaaSModelRef phase=Ready..."
+                    TIMEOUT=180
+                    ELAPSED=0
+                    while [ $ELAPSED -lt $TIMEOUT ]; do
+                        MODELREF_PHASE=$(oc get maasmodelref "$EXTMODEL_NAME" -n "$EXTMODEL_NS" \
+                            -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+                        [ "$MODELREF_PHASE" = "Ready" ] && break
+                        sleep 5
+                        ELAPSED=$((ELAPSED + 5))
+                    done
+                    if [ "${MODELREF_PHASE:-}" = "Ready" ]; then
+                        log_info "MaaSModelRef: Ready"
+                    else
+                        log_warn "MaaSModelRef not Ready after ${TIMEOUT}s (phase: ${MODELREF_PHASE:-unknown})"
+                    fi
+
+                    MAAS_GW="https://maas.${CLUSTER_DOMAIN}"
+                    OC_TOKEN=$(oc whoami -t 2>/dev/null || echo "")
+                    if [ -n "$OC_TOKEN" ]; then
+                        MODEL_READY=$(curl -sk "${MAAS_GW}/maas-api/v1/models" \
+                            -H "Authorization: Bearer ${OC_TOKEN}" 2>/dev/null \
+                            | grep -o "\"id\":\"${EXTMODEL_NAME}\"" || echo "")
+                        if [ -n "$MODEL_READY" ]; then
+                            log_info "Model ${EXTMODEL_NAME} visible in MaaS API (ready)"
+                        else
+                            log_warn "Model ${EXTMODEL_NAME} not yet visible in MaaS API"
+                        fi
+
+                        log_step "Testing ${EXTERNAL_MODEL_PROVIDER} inference through MaaS gateway..."
+                        log_info "Creating ephemeral API key for testing..."
+                        API_KEY_RESPONSE=$(curl -sk -X POST "${MAAS_GW}/maas-api/v1/api-keys" \
+                            -H "Authorization: Bearer ${OC_TOKEN}" \
+                            -H "Content-Type: application/json" \
+                            -d "{\"name\": \"phase8-test\", \"subscription\": \"${EXTMODEL_SUBSCRIPTION}\", \"expiresIn\": \"1h\", \"ephemeral\": true}" 2>/dev/null || echo "")
+
+                        TEST_API_KEY=$(echo "$API_KEY_RESPONSE" | grep -o '"key":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+                        if [ -n "$TEST_API_KEY" ]; then
+                            log_info "Ephemeral API key created"
+
+                            INFERENCE_RESPONSE=$(curl -sk -X POST \
+                                "${MAAS_GW}/external-models/${EXTMODEL_NAME}/v1/chat/completions" \
+                                -H "Authorization: Bearer ${TEST_API_KEY}" \
+                                -H "Content-Type: application/json" \
+                                -d "{\"model\": \"${EXTMODEL_TARGET_MODEL}\", \"messages\": [{\"role\": \"user\", \"content\": \"Say hello in exactly 3 words.\"}], \"max_tokens\": 20}" \
+                                --max-time 30 2>/dev/null || echo "")
+
+                            if echo "$INFERENCE_RESPONSE" | grep -q '"choices"'; then
+                                REPLY_TEXT=$(echo "$INFERENCE_RESPONSE" | grep -o '"content":"[^"]*"' | head -1 | cut -d'"' -f4)
+                                log_info "${EXTERNAL_MODEL_PROVIDER} inference SUCCESS: ${REPLY_TEXT}"
+                            else
+                                HTTP_CODE=$(curl -sk -o /dev/null -w '%{http_code}' -X POST \
+                                    "${MAAS_GW}/external-models/${EXTMODEL_NAME}/v1/chat/completions" \
+                                    -H "Authorization: Bearer ${TEST_API_KEY}" \
+                                    -H "Content-Type: application/json" \
+                                    -d "{\"model\": \"${EXTMODEL_TARGET_MODEL}\", \"messages\": [{\"role\": \"user\", \"content\": \"Hi\"}], \"max_tokens\": 5}" \
+                                    --max-time 15 2>/dev/null || echo "000")
+                                log_warn "${EXTERNAL_MODEL_PROVIDER} inference returned HTTP ${HTTP_CODE} - model is registered and governed but inference routing may need BBR ext-proc propagation"
+                            fi
+
+                            TEST_KEY_ID=$(echo "$API_KEY_RESPONSE" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+                            if [ -n "$TEST_KEY_ID" ]; then
+                                curl -sk -X DELETE "${MAAS_GW}/maas-api/v1/api-keys/${TEST_KEY_ID}" \
+                                    -H "Authorization: Bearer ${OC_TOKEN}" &>/dev/null || true
+                            fi
+                        else
+                            log_warn "Could not create API key for testing (response: $(echo "$API_KEY_RESPONSE" | head -c 200))"
+                        fi
+                    else
+                        log_warn "No OC token available - skipping API verification"
+                    fi
+                fi
+
+                log_info "External models deployment complete (provider: ${EXTERNAL_MODEL_PROVIDER})"
+            fi
+        fi
+    fi
+fi
+
+# =============================================================================
 # Final Summary
 # =============================================================================
 echo ""
@@ -789,8 +949,15 @@ else
     log_info "Health:        HTTP ${HEALTH}"
 
     if [ "$SKIP_MODELS" = false ] && [ "$HAS_MODELS" = true ] || oc get llminferenceservice -n llm &>/dev/null 2>&1; then
-        log_info "Models:"
+        log_info "Models (local):"
         oc get llminferenceservice -n llm --no-headers 2>/dev/null | while read -r line; do
+            log_info "  $line"
+        done
+    fi
+
+    if oc get externalmodel -n external-models &>/dev/null 2>&1; then
+        log_info "Models (external):"
+        oc get externalmodel -n external-models --no-headers 2>/dev/null | while read -r line; do
             log_info "  $line"
         done
     fi
@@ -800,6 +967,7 @@ else
     [ "$SKIP_MODELS" = true ] && log_info "  Deploy models:      ./scripts/deploy-model.sh --model auto"
     [ "$SKIP_VERIFY" = true ] && log_info "  Run verification:   ./scripts/verify-maas.sh"
     [ "$WITH_OBSERVABILITY" = false ] && log_info "  Add observability:  $0 --from-phase 7 --with-observability"
+    [ "$WITH_EXTERNAL_MODELS" = false ] && log_info "  Add external models: $0 --from-phase 8 --with-external-models --external-model-provider openai --external-model-api-key <KEY>"
     log_info "  RHOAI Dashboard:    https://$(oc get route rhods-dashboard -n redhat-ods-applications -o jsonpath='{.spec.host}' 2>/dev/null || echo '<dashboard-route>')"
 fi
 

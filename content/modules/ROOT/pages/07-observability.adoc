@@ -88,4 +88,4 @@ manifests/07-observability/
 
 == Next step
 
-Proceed to xref:08-architecture.adoc[Architecture & Request Flow].
+Proceed to xref:08-external-models.adoc[Phase 8: External Models].
