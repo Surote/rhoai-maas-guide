@@ -1,0 +1,226 @@
+= Phase 8: External Models (Optional)
+
+NOTE: This phase requires a completed MaaS installation (through xref:04-rhoai-config.adoc[Phase 4]) and at least one local model deployed (xref:05-maas-models.adoc[Phase 5]) to validate the gateway is functional.
+
+The `ExternalModel` CRD lets you expose third-party LLM APIs (OpenAI, Google Gemini, Azure OpenAI, etc.) through the MaaS gateway. External models get the same API key management, authentication, rate limiting, and usage tracking as locally-served models - your consumers use a single gateway endpoint regardless of where the model runs.
+
+== How It Works
+
+An external model deployment requires five resources:
+
+. *Secret* - stores the provider API key. Must have the label `inference.networking.k8s.io/bbr-managed=true` so the BBR ext-proc can inject the credential into upstream requests.
+
+. *ExternalModel* - defines the provider, target model, endpoint, and credential reference. The BBR (Backend Binding Resolver) handles path rewriting and authentication header injection.
+
+. *MaaSModelRef* - registers the external model in the MaaS catalog so it appears in the API and can be governed.
+
+. *MaaSAuthPolicy* - grants access to specific users or groups.
+
+. *MaaSSubscription* - sets rate limits (tokens per hour) and priority.
+
+== Step 1: Create the Namespace and Secret
+
+The external models live in their own namespace, separate from the MaaS platform and local models:
+
+[source,bash]
+----
+oc apply -f manifests/08-external-models/openai/namespace.yaml
+----
+
+Create the provider credential Secret. This is done imperatively (never stored in manifests):
+
+[source,bash]
+----
+oc create secret generic openai-api-key \
+    --from-literal=api-key="$OPENAI_API_KEY" \
+    -n external-models \
+    --dry-run=client -o yaml | oc apply -f -
+
+oc label secret openai-api-key -n external-models \
+    inference.networking.k8s.io/bbr-managed=true --overwrite
+----
+
+IMPORTANT: The `inference.networking.k8s.io/bbr-managed=true` label is required. Without it, the BBR ext-proc will not inject the API key into upstream requests and the provider will reject calls with 401.
+
+== Step 2: Apply the ExternalModel CR
+
+[source,bash]
+----
+oc apply -k manifests/08-external-models/openai/model/
+----
+
+This creates the `ExternalModel` resource:
+
+[source,yaml]
+----
+apiVersion: maas.opendatahub.io/v1alpha1
+kind: ExternalModel
+metadata:
+  name: gpt-4o-mini
+  namespace: external-models
+spec:
+  provider: openai
+  targetModel: gpt-4o-mini
+  endpoint: api.openai.com
+  credentialRef:
+    name: openai-api-key
+----
+
+== Step 3: Apply MaaS Governance
+
+[source,bash]
+----
+oc apply -k manifests/08-external-models/openai/maas/
+----
+
+This creates three resources:
+
+* `MaaSModelRef` - registers `gpt-4o-mini` in the MaaS catalog
+* `MaaSAuthPolicy` - grants all authenticated users access
+* `MaaSSubscription` - sets a free tier with 10,000 tokens/hour rate limit
+
+== Verification
+
+Check the MaaSModelRef reaches `Ready`:
+
+[source,bash]
+----
+oc get maasmodelref gpt-4o-mini -n external-models
+# Expected: PHASE = Ready
+----
+
+Check the model appears in the MaaS API:
+
+[source,bash]
+----
+MAAS_GW="https://maas.$(oc get ingresses.config/cluster -o jsonpath='{.spec.domain}')"
+curl -sk "${MAAS_GW}/maas-api/v1/models" \
+    -H "Authorization: Bearer $(oc whoami -t)" | python3 -m json.tool
+----
+
+Create an API key and test inference:
+
+[source,bash]
+----
+# Create an API key bound to the openai-free subscription
+API_KEY=$(curl -sk -X POST "${MAAS_GW}/maas-api/v1/api-keys" \
+    -H "Authorization: Bearer $(oc whoami -t)" \
+    -H "Content-Type: application/json" \
+    -d '{"name": "openai-test", "subscription": "openai-free", "expiresIn": "1h"}' \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['key'])")
+
+# Test inference
+curl -sk "${MAAS_GW}/external-models/gpt-4o-mini/v1/chat/completions" \
+    -H "Authorization: Bearer ${API_KEY}" \
+    -H "Content-Type: application/json" \
+    -d '{"model": "gpt-4o-mini", "messages": [{"role": "user", "content": "Say hello in 3 words."}], "max_tokens": 20}'
+----
+
+A successful response contains a `choices` array with the model's reply.
+
+WARNING: There is a known platform bug where the BBR ext-proc filter is never inserted into the Envoy filter chain due to an EnvoyFilter match mismatch. If inference returns 404, see the <<known-issues>> section below. This is tracked in link:https://redhat.atlassian.net/browse/RHOAIENG-68594[RHOAIENG-68594].
+
+== Automated Setup
+
+The setup script handles all of the above in a single command:
+
+[source,bash]
+----
+./scripts/setup-maas.sh --from-phase 8 \
+    --with-external-models \
+    --external-model-provider openai \
+    --external-model-api-key "$OPENAI_API_KEY"
+----
+
+The `--external-model-provider` flag selects which provider manifests to deploy (default: `openai`).
+
+== Other Providers
+
+[[google-gemini]]
+=== Google Gemini
+
+Manifests for Google Gemini (`gemini-2.5-flash`) are included under `manifests/08-external-models/gemini/`. To deploy Gemini instead of OpenAI, use `--external-model-provider gemini`.
+
+WARNING: There is a known incompatibility between the Gemini API and the BBR `openai` provider translator. The BBR hardcodes the upstream path to `/v1/chat/completions`, but Gemini's OpenAI-compatible endpoint requires `/v1beta/openai/chat/completions`. This means ExternalModel registration and MaaS governance will work correctly, but inference requests will return HTTP 404 from Google's API. This is tracked in link:https://redhat.atlassian.net/browse/RHOAIENG-68592[RHOAIENG-68592] and link:https://github.com/opendatahub-io/ai-gateway-payload-processing/issues/260[upstream issue #260]. Once a `gemini` provider translator is added to the BBR, Gemini external models will work end-to-end.
+
+To deploy with Gemini (registration only, inference will 404):
+
+[source,bash]
+----
+./scripts/setup-maas.sh --from-phase 8 \
+    --with-external-models \
+    --external-model-provider gemini \
+    --external-model-api-key "$GEMINI_API_KEY"
+----
+
+[[known-issues]]
+== Known Issues
+
+=== ext-proc filter not inserted (RHOAIENG-68594)
+
+The `payload-processing` EnvoyFilter matches on a WasmPlugin-style filter name (`extensions.istio.io/wasmplugin/...`), but Kuadrant creates the Wasm filter with the generic name `envoy.filters.http.wasm`. The match fails, so the BBR ext-proc is never added to the Envoy filter chain. Without ext-proc, there is no path rewriting and no credential injection - inference returns 404 or 401 from the upstream provider.
+
+This affects all external model providers. A temporary workaround (reverted by the MaaS controller within seconds):
+
+[source,bash]
+----
+oc patch envoyfilter payload-processing -n openshift-ingress --type='json' \
+  -p='[{"op": "replace", "path": "/spec/configPatches/0/match/listener/filterChain/filter/subFilter/name", "value": "envoy.filters.http.wasm"}]'
+----
+
+Tracked in link:https://redhat.atlassian.net/browse/RHOAIENG-68594[RHOAIENG-68594].
+
+=== Gemini path incompatibility (RHOAIENG-68592)
+
+The BBR `openai` provider hardcodes the upstream path to `/v1/chat/completions`, but Gemini requires `/v1beta/openai/chat/completions`. See the <<google-gemini,Google Gemini>> section above for details. Tracked in link:https://redhat.atlassian.net/browse/RHOAIENG-68592[RHOAIENG-68592].
+
+== Appendix
+
+=== Directory Structure
+
+[source]
+----
+manifests/08-external-models/
+  openai/
+    kustomization.yaml           # Top-level: namespace + model + maas
+    namespace.yaml               # external-models namespace
+    model/
+      kustomization.yaml
+      external-model.yaml        # ExternalModel CR (gpt-4o-mini)
+    maas/
+      kustomization.yaml
+      maas-model.yaml            # MaaSModelRef
+      maas-auth-policy.yaml      # MaaSAuthPolicy (system:authenticated)
+      maas-subscription.yaml     # MaaSSubscription (10k tokens/hour)
+  gemini/
+    kustomization.yaml
+    namespace.yaml
+    model/
+      kustomization.yaml
+      external-model.yaml        # ExternalModel CR (gemini-2.5-flash)
+    maas/
+      kustomization.yaml
+      maas-model.yaml
+      maas-auth-policy.yaml
+      maas-subscription.yaml
+----
+
+=== Supported Providers
+
+The `provider` field in the ExternalModel spec maps to a BBR payload translator. Currently supported values:
+
+* `openai` - OpenAI API (`api.openai.com`)
+* `anthropic` - Anthropic API
+* `azure-openai` - Azure OpenAI Service
+* `bedrock-openai` - AWS Bedrock (OpenAI-compatible)
+
+== References
+
+* link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html-single/govern_llm_access_with_models-as-a-service/index#maas-external-model_maas-deploy[RHOAI ExternalModel documentation]
+* link:https://github.com/opendatahub-io/ai-gateway-payload-processing[BBR (ai-gateway-payload-processing) repository]
+* link:https://redhat.atlassian.net/browse/RHOAIENG-68594[RHOAIENG-68594 - ext-proc EnvoyFilter match mismatch (all providers)]
+* link:https://redhat.atlassian.net/browse/RHOAIENG-68592[RHOAIENG-68592 - Gemini BBR path incompatibility]
+
+== Next step
+
+Proceed to xref:08-architecture.adoc[Architecture & Request Flow].
