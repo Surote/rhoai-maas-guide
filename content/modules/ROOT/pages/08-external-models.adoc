@@ -2,7 +2,7 @@
 
 NOTE: This phase requires a completed MaaS installation (through xref:04-rhoai-config.adoc[Phase 4]) and at least one local model deployed (xref:05-maas-models.adoc[Phase 5]) to validate the gateway is functional.
 
-The `ExternalModel` CRD lets you expose third-party LLM APIs (OpenAI, Google Gemini, Azure OpenAI, etc.) through the MaaS gateway. External models get the same API key management, authentication, rate limiting, and usage tracking as locally-served models - your consumers use a single gateway endpoint regardless of where the model runs.
+The `ExternalModel` CRD lets you expose third-party LLM APIs (OpenAI, AWS Bedrock, Google Gemini, Azure OpenAI, etc.) through the MaaS gateway. External models get the same API key management, authentication, rate limiting, and usage tracking as locally-served models - your consumers use a single gateway endpoint regardless of where the model runs.
 
 == How It Works
 
@@ -132,7 +132,7 @@ The setup script handles all of the above in a single command:
     --external-model-api-key "$OPENAI_API_KEY"
 ----
 
-The `--external-model-provider` flag selects which provider manifests to deploy (default: `openai`).
+The `--external-model-provider` flag selects which provider manifests to deploy (`openai`, `gemini`, or `bedrock`; default: `openai`).
 
 == Other Providers
 
@@ -151,6 +151,123 @@ To deploy with Gemini (registration only, inference will 404):
     --with-external-models \
     --external-model-provider gemini \
     --external-model-api-key "$GEMINI_API_KEY"
+----
+
+[[aws-bedrock]]
+=== AWS Bedrock
+
+Manifests for AWS Bedrock (`openai.gpt-oss-20b` via the Mantle endpoint) are included under `manifests/08-external-models/bedrock/`. Bedrock uses the `bedrock-openai` provider, which routes through the OpenAI-compatible Mantle API - no request body translation is needed.
+
+WARNING: Use `bedrock-mantle.<region>.api.aws`, *not* `bedrock-runtime.<region>.amazonaws.com`. The BBR translator uses `/v1/chat/completions`, which is only available on the Mantle endpoint. Using `bedrock-runtime` will result in 404 errors.
+
+==== Prerequisites
+
+Bedrock requires a *Bedrock API Key* (ABSK key), not standard AWS access keys. Create one via IAM service-specific credentials:
+
+[source,bash]
+----
+# Create an IAM user for Bedrock API access
+aws iam create-user --user-name bedrock-api-user
+
+# Attach Bedrock access policy
+aws iam attach-user-policy \
+    --user-name bedrock-api-user \
+    --policy-arn arn:aws:iam::aws:policy/AmazonBedrockLimitedAccess
+
+# Generate a long-term ABSK key (up to 90 days)
+aws iam create-service-specific-credential \
+    --user-name bedrock-api-user \
+    --service-name bedrock.amazonaws.com \
+    --credential-age-days 90
+----
+
+The output contains a `ServiceSpecificCredential.ServicePassword` field starting with `ABSK` - this is the API key to use.
+
+TIP: Verify the ABSK key works before deploying: `curl -s "https://bedrock-mantle.us-east-2.api.aws/v1/models" -H "Authorization: Bearer $BEDROCK_API_KEY" | python3 -m json.tool`
+
+==== Manual Deployment
+
+Create the namespace if it does not already exist (shared with other external model providers):
+
+[source,bash]
+----
+oc apply -f manifests/08-external-models/bedrock/namespace.yaml
+----
+
+Create the credential Secret (never stored in manifests):
+
+[source,bash]
+----
+oc create secret generic bedrock-api-key \
+    --from-literal=api-key="$BEDROCK_API_KEY" \
+    -n external-models \
+    --dry-run=client -o yaml | oc apply -f -
+
+oc label secret bedrock-api-key -n external-models \
+    inference.networking.k8s.io/bbr-managed=true --overwrite
+----
+
+Apply the ExternalModel and MaaS governance resources:
+
+[source,bash]
+----
+oc apply -k manifests/08-external-models/bedrock/model/
+oc apply -k manifests/08-external-models/bedrock/maas/
+----
+
+The ExternalModel CR:
+
+[source,yaml]
+----
+apiVersion: maas.opendatahub.io/v1alpha1
+kind: ExternalModel
+metadata:
+  name: aws-gpt-oss-20b
+  namespace: external-models
+spec:
+  provider: bedrock-openai
+  targetModel: openai.gpt-oss-20b
+  endpoint: bedrock-mantle.us-east-2.api.aws
+  credentialRef:
+    name: bedrock-api-key
+----
+
+NOTE: The `endpoint` must match your AWS region. Replace `us-east-2` with your region if different.
+
+Verify the model reaches Ready:
+
+[source,bash]
+----
+oc get maasmodelref aws-gpt-oss-20b -n external-models
+# Expected: PHASE = Ready
+----
+
+Test inference:
+
+[source,bash]
+----
+MAAS_GW="https://maas.$(oc get ingresses.config/cluster -o jsonpath='{.spec.domain}')"
+
+API_KEY=$(curl -sk -X POST "${MAAS_GW}/maas-api/v1/api-keys" \
+    -H "Authorization: Bearer $(oc whoami -t)" \
+    -H "Content-Type: application/json" \
+    -d '{"name": "bedrock-test", "subscription": "bedrock-free", "expiresIn": "1h"}' \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['key'])")
+
+curl -sk "${MAAS_GW}/external-models/aws-gpt-oss-20b/v1/chat/completions" \
+    -H "Authorization: Bearer ${API_KEY}" \
+    -H "Content-Type: application/json" \
+    -d '{"model": "openai.gpt-oss-20b", "messages": [{"role": "user", "content": "Say hello in 3 words."}], "max_tokens": 20}'
+----
+
+==== Automated Deployment
+
+[source,bash]
+----
+./scripts/setup-maas.sh --from-phase 8 \
+    --with-external-models \
+    --external-model-provider bedrock \
+    --external-model-api-key "$BEDROCK_API_KEY"
 ----
 
 [[known-issues]]
@@ -198,6 +315,17 @@ manifests/08-external-models/
     model/
       kustomization.yaml
       external-model.yaml        # ExternalModel CR (gemini-2.5-flash)
+    maas/
+      kustomization.yaml
+      maas-model.yaml
+      maas-auth-policy.yaml
+      maas-subscription.yaml
+  bedrock/
+    kustomization.yaml
+    namespace.yaml
+    model/
+      kustomization.yaml
+      external-model.yaml        # ExternalModel CR (openai.gpt-oss-20b via Mantle)
     maas/
       kustomization.yaml
       maas-model.yaml

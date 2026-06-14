@@ -87,7 +87,7 @@ Options:
   --skip-verify        Skip Phase 6 (verification)
   --with-observability Also run Phase 7 (COO + Gateway telemetry)
   --with-external-models Also run Phase 8 (ExternalModel deployment + test)
-  --external-model-provider <p>   Provider: openai (default), gemini (or set EXTERNAL_MODEL_PROVIDER)
+  --external-model-provider <p>   Provider: openai (default), gemini, bedrock (or set EXTERNAL_MODEL_PROVIDER)
   --external-model-api-key <key>  API key for external provider (or set EXTERNAL_MODEL_API_KEY)
   --dry-run            Preview without applying
   -h, --help           Show this help message
@@ -801,8 +801,14 @@ if should_run 8 && [ "$WITH_EXTERNAL_MODELS" = true ]; then
                 EXTMODEL_SUBSCRIPTION="gemini-free"
                 EXTMODEL_TARGET_MODEL="gemini-2.5-flash"
                 ;;
+            bedrock)
+                EXTMODEL_NAME="aws-gpt-oss-20b"
+                EXTMODEL_SECRET="bedrock-api-key"
+                EXTMODEL_SUBSCRIPTION="bedrock-free"
+                EXTMODEL_TARGET_MODEL="openai.gpt-oss-20b"
+                ;;
             *)
-                log_warn "Unknown provider '${EXTERNAL_MODEL_PROVIDER}' (supported: openai, gemini)"
+                log_warn "Unknown provider '${EXTERNAL_MODEL_PROVIDER}' (supported: openai, gemini, bedrock)"
                 log_warn "Skipping Phase 8"
                 EXTERNAL_MODEL_API_KEY=""
                 ;;
