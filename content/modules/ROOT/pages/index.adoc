@@ -78,6 +78,17 @@ Each phase has step-by-step instructions, status gates, and troubleshooting.
 | 5 min
 |===
 
+=== External Models
+
+[cols="1,3,1", options="header"]
+|===
+| Phase | Description | Time
+
+| xref:08-external-models.adoc[8. External Models] _(optional)_
+| Expose third-party LLM APIs (OpenAI, Bedrock, Gemini) through the MaaS gateway
+| 5-10 min
+|===
+
 == Automated Setup
 
 For end-to-end deployment using a single script, see the xref:quick-start.adoc[Automated Setup] page.
