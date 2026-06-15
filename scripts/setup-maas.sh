@@ -374,6 +374,8 @@ if should_run 2; then
         fi
         log_info "Rendering with CLUSTER_DOMAIN=${CLUSTER_DOMAIN}, CERT_NAME=${CERT_NAME}"
         export CLUSTER_DOMAIN CERT_NAME
+        # Apply gateway resource ConfigMap first (sets 2Gi memory limit via parametersRef)
+        run_cmd oc apply -f "$MANIFESTS_DIR/02-platform-config/gateway-resources.yaml"
         if [ "$DRY_RUN" = true ]; then
             log_info "[DRY RUN] envsubst < gateway.yaml.tmpl | oc apply -f -"
         else
@@ -511,6 +513,7 @@ if should_run 3; then
     if ! oc get gateway maas-default-gateway -n openshift-ingress &>/dev/null 2>&1; then
         log_step "Rendering and applying Gateway (not created in Phase 2)..."
         export CLUSTER_DOMAIN CERT_NAME
+        run_cmd oc apply -f "$MANIFESTS_DIR/02-platform-config/gateway-resources.yaml"
         if [ "$DRY_RUN" = true ]; then
             log_info "[DRY RUN] envsubst < gateway.yaml.tmpl | oc apply -f -"
         else
