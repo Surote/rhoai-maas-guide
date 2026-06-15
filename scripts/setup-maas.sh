@@ -253,6 +253,22 @@ if should_run 1; then
         run_cmd oc apply -k "$MANIFESTS_DIR/01-prerequisites/operators/"
         log_info "Operator subscriptions applied"
 
+        log_info "Approving RHCL install plan (pinned to v1.3.4, Manual approval)..."
+        if [ "$DRY_RUN" = false ]; then
+            for attempt in $(seq 1 30); do
+                PENDING=$(oc get installplan -n openshift-operators --no-headers 2>/dev/null | grep -v "true" | awk '{print $1}')
+                if [ -n "$PENDING" ]; then
+                    echo "$PENDING" | xargs -I{} oc patch installplan {} -n openshift-operators \
+                        --type=merge -p '{"spec":{"approved":true}}' 2>/dev/null || true
+                    log_info "  Install plan(s) approved"
+                    break
+                fi
+                sleep 2
+            done
+        else
+            log_info "[DRY RUN] Would approve RHCL install plan"
+        fi
+
         log_info "Waiting for operator CSVs (this may take 2-5 minutes)..."
         if [ "$DRY_RUN" = false ]; then
             for ns_label in \
