@@ -112,6 +112,51 @@ If your cluster has GPU nodes (or you plan to add them), install the GPU operato
 oc apply -k manifests/01-prerequisites/gpu/
 ----
 
+=== Step 2b (Optional): Create GPU Operand Instances
+
+After the GPU operator CSVs have succeeded (see <<Verification>> below), create the operand instances that configure NFD and the GPU driver stack.
+
+IMPORTANT: The operators must be fully installed before applying these resources - the CRDs they define do not exist until the operators are ready. Wait for both CSVs to succeed first.
+
+[source,bash]
+----
+# Wait for GPU operator CSVs to succeed
+oc wait csv -n openshift-nfd -l operators.coreos.com/nfd.openshift-nfd="" \
+  --for=jsonpath='{.status.phase}'=Succeeded --timeout=600s
+
+oc wait csv -n nvidia-gpu-operator -l operators.coreos.com/gpu-operator-certified.nvidia-gpu-operator="" \
+  --for=jsonpath='{.status.phase}'=Succeeded --timeout=600s
+----
+
+Create the NFD NodeFeatureDiscovery instance (scans nodes for GPU hardware) and the NVIDIA ClusterPolicy (installs drivers, device plugin, monitoring):
+
+[source,bash]
+----
+oc apply -k manifests/01-prerequisites/gpu/instances/
+----
+
+Wait for the ClusterPolicy to reach `ready` state (this takes 5-10 minutes as the GPU operator installs NVIDIA drivers on GPU nodes):
+
+[source,bash]
+----
+oc wait clusterpolicy gpu-cluster-policy \
+  --for=jsonpath='{.status.state}'=ready --timeout=600s
+----
+
+Verify GPU resources are available:
+
+[source,bash]
+----
+# Check NFD labeled GPU nodes
+oc get nodes -l feature.node.kubernetes.io/pci-10de.present=true
+
+# Check GPU operator pods
+oc get pods -n nvidia-gpu-operator
+
+# Check nvidia.com/gpu resources on GPU nodes
+oc get nodes -l nvidia.com/gpu.present=true
+----
+
 === Step 3: Install MetalLB (Non-Cloud Platforms Only)
 
 NOTE: Read this section carefully!
@@ -281,9 +326,13 @@ manifests/01-prerequisites/
     rhoai-operator/
     service-mesh/
   gpu/
-    kustomization.yaml          # aggregates NFD + NVIDIA
+    kustomization.yaml          # aggregates NFD + NVIDIA operator subscriptions
     nfd/
     nvidia-operator/
+    instances/
+      kustomization.yaml        # aggregates NFD + GPU operand instances
+      nodefeaturediscovery.yaml  # NFD NodeFeatureDiscovery CR
+      cluster-policy.yaml       # NVIDIA GPU ClusterPolicy CR
   metallb/
     kustomization.yaml          # MetalLB namespace + operatorgroup + subscription
     namespace.yaml
