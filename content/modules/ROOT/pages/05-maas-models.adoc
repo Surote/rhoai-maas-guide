@@ -90,6 +90,24 @@ Deploy the simulator (no GPU required):
 oc apply -k manifests/05-maas-models/simulator/
 ----
 
+[NOTE]
+====
+*HuggingFace Xet Download Hang*
+
+The simulator uses `hf://sshleifer/tiny-gpt2` as its model URI. HuggingFace has migrated model storage to the Xet protocol, which can cause the KServe storage-initializer init container to hang indefinitely during download. If the model pod is stuck in `Init:0/1` for more than 5 minutes, apply this workaround:
+
+[source,bash]
+----
+oc patch deployment facebook-opt-125m-simulated-kserve -n llm \
+  --type=json \
+  -p '[{"op":"add","path":"/spec/template/spec/initContainers/0/env/-","value":{"name":"HF_HUB_DISABLE_XET","value":"1"}}]'
+----
+
+This disables the Xet protocol and falls back to standard HTTP downloads. The patched pod should complete init within 30 seconds. Note that KServe may revert this patch on reconciliation, so reapply if the model is redeployed.
+
+GPU models using OCI modelcar images (granite-tiny-gpu, gpt-oss-20b) are *not* affected by this issue since they do not download from HuggingFace.
+====
+
 Or deploy a GPU model if your cluster has NVIDIA GPUs:
 
 [source,bash]
