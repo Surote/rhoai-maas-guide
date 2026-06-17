@@ -4,25 +4,77 @@ NOTE: User Workload Monitoring (UWM) was already configured in xref:02-platform-
 
 This phase adds *optional* observability enhancements on top of UWM:
 
+. *Tempo Operator* - provides the `TempoStack` CRD that the RHOAI operator's Monitoring controller requires for distributed tracing. Without this operator, the Monitoring CR cannot provision tracing infrastructure.
+
+. *Red Hat build of OpenTelemetry Operator* - provides the `OpenTelemetryCollector` CRD that the RHOAI operator's Monitoring controller requires. Without this operator, the Monitoring CR fails with: _"OpenTelemetryCollector operator must be installed for OpenTelemetry configuration"_. This blocks the full observability chain: MonitoringStack, ThanosQuerier, Perses, and PrometheusDatasource.
+
 . *Cluster Observability Operator (COO)* - required for the Observability Dashboard tab in the {rhoai} UI. COO provides the Perses CRDs (`Perses`, `PersesDatasource`, `PersesDashboard`) that the RHOAI operator uses to deploy the dashboard backend.
 
 . *Gateway Telemetry* - per-model, per-user, per-subscription usage metrics on the MaaS gateway. Adds fine-grained labels (`model`, `user`, `subscription`, `organization_id`, `cost_center`) to gateway metrics for usage attribution and billing.
 
-== Step 1: Install the Cluster Observability Operator
+== Step 1: Install the Tempo Operator
 
 [source,bash]
 ----
-oc apply -k manifests/07-observability/coo/
+oc apply -k manifests/07-observability/tempo/
 ----
 
 Wait for the operator CSV to reach `Succeeded`:
 
 [source,bash]
 ----
-oc get csv -n openshift-cluster-observability-operator -w
+oc wait csv -n openshift-tempo-operator \
+  -l operators.coreos.com/tempo-product.openshift-tempo-operator="" \
+  --for=jsonpath='{.status.phase}'=Succeeded --timeout=300s
 ----
 
-== Step 2: Apply Gateway Telemetry
+== Step 2: Install the Red Hat build of OpenTelemetry Operator
+
+[source,bash]
+----
+oc apply -k manifests/07-observability/opentelemetry/
+----
+
+Wait for the operator CSV to reach `Succeeded`:
+
+[source,bash]
+----
+oc wait csv -n openshift-opentelemetry-operator \
+  -l operators.coreos.com/opentelemetry-product.openshift-opentelemetry-operator="" \
+  --for=jsonpath='{.status.phase}'=Succeeded --timeout=300s
+----
+
+== Step 3: Install the Cluster Observability Operator
+
+NOTE: COO is pinned to **v1.4.0** with Manual install plan approval. This avoids potential regressions in newer versions. The pin will be removed once upstream validation completes.
+
+[source,bash]
+----
+oc apply -k manifests/07-observability/coo/
+----
+
+Approve the install plan (required because of Manual approval):
+
+[source,bash]
+----
+sleep 10
+oc get installplan -n openshift-cluster-observability-operator --no-headers \
+  -o custom-columns='NAME:.metadata.name,APPROVED:.spec.approved' | \
+  grep false | awk '{print $1}' | \
+  xargs -I{} oc patch installplan {} -n openshift-cluster-observability-operator \
+    --type=merge -p '{"spec":{"approved":true}}'
+----
+
+Wait for the operator CSV to reach `Succeeded`:
+
+[source,bash]
+----
+oc wait csv -n openshift-cluster-observability-operator \
+  -l operators.coreos.com/cluster-observability-operator.openshift-cluster-observability="" \
+  --for=jsonpath='{.status.phase}'=Succeeded --timeout=300s
+----
+
+== Step 4: Apply Gateway Telemetry
 
 Once COO is installed and the MaaS gateway is running:
 
@@ -33,18 +85,31 @@ oc apply -k manifests/07-observability/telemetry/
 
 == Verification
 
-Check the COO operator is installed:
+Check all three observability operators are installed:
 
 [source,bash]
 ----
+oc get csv -n openshift-tempo-operator | grep tempo
+# Expected: tempo-operator   Succeeded
+
+oc get csv -n openshift-opentelemetry-operator | grep opentelemetry
+# Expected: opentelemetry-operator   Succeeded
+
 oc get csv -n openshift-cluster-observability-operator | grep cluster-observability-operator
 # Expected: cluster-observability-operator   Succeeded
 ----
 
-Check the Perses CRDs are registered:
+Check the required CRDs are registered:
 
 [source,bash]
 ----
+# Tempo
+oc get crd tempostacks.tempo.grafana.com
+
+# OpenTelemetry
+oc get crd opentelemetrycollectors.opentelemetry.io
+
+# COO / Perses
 oc get crd perses.perses.dev
 ----
 
@@ -69,6 +134,16 @@ oc get telemetry.telemetry.istio.io latency-per-subscription -n openshift-ingres
 [source]
 ----
 manifests/07-observability/
+  tempo/
+    kustomization.yaml           # Tempo operator subscription
+    namespace.yaml               # openshift-tempo-operator namespace
+    operatorgroup.yaml           # Tempo OperatorGroup
+    subscription.yaml            # Tempo Subscription
+  opentelemetry/
+    kustomization.yaml           # OpenTelemetry operator subscription
+    namespace.yaml               # openshift-opentelemetry-operator namespace
+    operatorgroup.yaml           # OpenTelemetry OperatorGroup
+    subscription.yaml            # OpenTelemetry Subscription
   coo/
     kustomization.yaml           # COO operator subscription
     namespace.yaml               # COO namespace
@@ -82,6 +157,7 @@ manifests/07-observability/
 
 == References
 
+* link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/managing_openshift_ai/managing-observability_managing-rhoai#enabling-the-observability-stack_managing-rhoai[RHOAI 3.4 - Enabling the observability stack]
 * link:https://docs.redhat.com/en/documentation/red_hat_openshift_cluster_observability_operator/1-latest[Cluster Observability Operator documentation]
 * link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html-single/govern_llm_access_with_models-as-a-service/index#maas-observability_maas-deploy[RHOAI Observability dashboard]
 * link:https://docs.kuadrant.io/dev/kuadrant-operator/doc/reference/telemetrypolicy/[Kuadrant TelemetryPolicy]

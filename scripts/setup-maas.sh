@@ -10,7 +10,7 @@
 #   Phase 4: RHOAI config   - DataScienceCluster, DSCInitialization, Dashboard
 #   Phase 5: Deploy model  - auto-detect GPU, apply model Kustomize
 #   Phase 6: Verify  - run 6-phase E2E verification
-#   Phase 7: Observability (optional)  - COO + Gateway telemetry
+#   Phase 7: Observability (optional)  - Tempo + OpenTelemetry + COO + Gateway telemetry
 #   Phase 8: External models (optional) - deploy ExternalModel (e.g. OpenAI, Gemini)
 #
 # Each phase is idempotent  - re-running skips what's already done.
@@ -23,7 +23,7 @@
 #   --from-phase <N>     Start from phase N (default: 0)
 #   --skip-models        Skip Phase 5 (model deployment)
 #   --skip-verify        Skip Phase 6 (verification)
-#   --with-observability Also run Phase 7 (COO + telemetry)
+#   --with-observability Also run Phase 7 (Tempo + OpenTelemetry + COO + telemetry)
 #   --with-external-models Also run Phase 8 (ExternalModel deployment)
 #   --external-model-api-key <key>  API key for external provider (or EXTERNAL_MODEL_API_KEY env var)
 #   --dry-run            Preview without applying
@@ -85,7 +85,7 @@ Options:
   --from-phase <N>     Start from phase N (0-8, default: 0)
   --skip-models        Skip Phase 5 (model deployment)
   --skip-verify        Skip Phase 6 (verification)
-  --with-observability Also run Phase 7 (COO + Gateway telemetry)
+  --with-observability Also run Phase 7 (Tempo + OpenTelemetry + COO + Gateway telemetry)
   --with-external-models Also run Phase 8 (ExternalModel deployment + test)
   --external-model-provider <p>   Provider: openai (default), gemini, bedrock (or set EXTERNAL_MODEL_PROVIDER)
   --external-model-api-key <key>  API key for external provider (or set EXTERNAL_MODEL_API_KEY)
@@ -100,7 +100,7 @@ Phases:
   4  MaaS platform      PostgreSQL secrets/deployment, Authorino TLS
   5  Deploy model       Auto-detect GPU, apply model Kustomize manifests
   6  Verify             6-phase E2E verification (API, auth, rate limits)
-  7  Observability      COO + Gateway telemetry (only with --with-observability)
+  7  Observability      Tempo + OpenTelemetry + COO + Gateway telemetry (only with --with-observability)
   8  External models    ExternalModel + governance (only with --with-external-models)
 
 Auto-detection (--model auto):
@@ -710,6 +710,7 @@ if should_run 5 && [ "$SKIP_MODELS" = false ]; then
             log_info "Waiting for model pods (up to 10 minutes for GPU models)..."
             TIMEOUT=600
             ELAPSED=0
+            XET_PATCHED=false
             while [ $ELAPSED -lt $TIMEOUT ]; do
                 POD_COUNT=$(oc get pods -n llm --no-headers 2>/dev/null | wc -l | tr -d ' ')
                 if [ "$POD_COUNT" -gt 0 ]; then
@@ -718,6 +719,18 @@ if should_run 5 && [ "$SKIP_MODELS" = false ]; then
                     if [ "$NOT_READY" -eq 0 ]; then
                         log_info "All model pods Running"
                         break
+                    fi
+                    # HuggingFace Xet workaround: if pods stuck in Init for >120s, disable Xet
+                    if [ "$XET_PATCHED" = false ] && [ $ELAPSED -ge 120 ]; then
+                        INIT_STUCK=$(oc get pods -n llm --no-headers 2>/dev/null | grep "Init:" | wc -l | tr -d ' ')
+                        if [ "$INIT_STUCK" -gt 0 ]; then
+                            log_warn "Pod stuck in Init - applying HF_HUB_DISABLE_XET=1 workaround"
+                            for deploy in $(oc get deployment -n llm --no-headers -o custom-columns=NAME:.metadata.name 2>/dev/null); do
+                                oc patch deployment "$deploy" -n llm --type=json \
+                                    -p '[{"op":"add","path":"/spec/template/spec/initContainers/0/env/-","value":{"name":"HF_HUB_DISABLE_XET","value":"1"}}]' 2>/dev/null || true
+                            done
+                            XET_PATCHED=true
+                        fi
                     fi
                 fi
                 sleep 10
@@ -768,9 +781,68 @@ fi
 if should_run 7 && [ "$WITH_OBSERVABILITY" = true ]; then
     log_phase 7 "Observability"
 
+    # Tempo Operator
+    log_step "Installing Tempo Operator..."
+    run_cmd oc apply -k "$MANIFESTS_DIR/07-observability/tempo/"
+    if [ "$DRY_RUN" = false ]; then
+        log_info "Waiting for Tempo CSV..."
+        TIMEOUT=300
+        ELAPSED=0
+        while [ $ELAPSED -lt $TIMEOUT ]; do
+            TEMPO_PHASE=$(oc get csv -n openshift-tempo-operator --no-headers 2>/dev/null \
+                | grep tempo-operator | awk '{print $NF}' || echo "")
+            [ "$TEMPO_PHASE" = "Succeeded" ] && break
+            sleep 10
+            ELAPSED=$((ELAPSED + 10))
+        done
+        if [ "${TEMPO_PHASE:-}" = "Succeeded" ]; then
+            log_info "Tempo CSV: Succeeded"
+        else
+            log_warn "Tempo CSV not Succeeded after ${TIMEOUT}s"
+        fi
+    fi
+
+    # Red Hat build of OpenTelemetry Operator
+    log_step "Installing Red Hat build of OpenTelemetry Operator..."
+    run_cmd oc apply -k "$MANIFESTS_DIR/07-observability/opentelemetry/"
+    if [ "$DRY_RUN" = false ]; then
+        log_info "Waiting for OpenTelemetry CSV..."
+        TIMEOUT=300
+        ELAPSED=0
+        while [ $ELAPSED -lt $TIMEOUT ]; do
+            OTEL_PHASE=$(oc get csv -n openshift-opentelemetry-operator --no-headers 2>/dev/null \
+                | grep opentelemetry-operator | awk '{print $NF}' || echo "")
+            [ "$OTEL_PHASE" = "Succeeded" ] && break
+            sleep 10
+            ELAPSED=$((ELAPSED + 10))
+        done
+        if [ "${OTEL_PHASE:-}" = "Succeeded" ]; then
+            log_info "OpenTelemetry CSV: Succeeded"
+        else
+            log_warn "OpenTelemetry CSV not Succeeded after ${TIMEOUT}s"
+        fi
+    fi
+
     # COO
     log_step "Installing Cluster Observability Operator..."
     run_cmd oc apply -k "$MANIFESTS_DIR/07-observability/coo/"
+
+    log_info "Approving COO install plan (pinned to v1.4.0, Manual approval)..."
+    if [ "$DRY_RUN" = false ]; then
+        for attempt in $(seq 1 30); do
+            PENDING=$(oc get installplan -n openshift-cluster-observability-operator --no-headers 2>/dev/null | grep -v "true" | awk '{print $1}')
+            if [ -n "$PENDING" ]; then
+                echo "$PENDING" | xargs -I{} oc patch installplan {} -n openshift-cluster-observability-operator \
+                    --type=merge -p '{"spec":{"approved":true}}' 2>/dev/null || true
+                log_info "  COO install plan(s) approved"
+                break
+            fi
+            sleep 2
+        done
+    else
+        log_info "[DRY RUN] Would approve COO install plan"
+    fi
+
     if [ "$DRY_RUN" = false ]; then
         log_info "Waiting for COO CSV..."
         TIMEOUT=300
