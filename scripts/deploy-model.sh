@@ -127,6 +127,18 @@ fi
 log_info "Selected model: $MODEL"
 
 # =============================================================================
+# Prepare llm namespace
+# =============================================================================
+log_step "Preparing llm namespace"
+
+if ! oc get namespace llm &>/dev/null; then
+    run_cmd oc create namespace llm
+fi
+oc label namespace llm opendatahub.io/generated-namespace=true --overwrite 2>/dev/null || true
+oc label namespace llm maas.opendatahub.io/gateway-access=true --overwrite 2>/dev/null || true
+log_info "llm namespace ready with required labels"
+
+# =============================================================================
 # Deploy model
 # =============================================================================
 log_step "Deploying model: $MODEL"

@@ -27,6 +27,8 @@ The external models live in their own namespace, separate from the MaaS platform
 oc apply -f manifests/08-external-models/openai/namespace.yaml
 ----
 
+NOTE: The namespace manifest includes the `maas.opendatahub.io/gateway-access=true` label, which is required for the Gateway to accept HTTPRoutes from this namespace. If you create the namespace manually instead of using the manifest, remember to apply this label: `oc label namespace external-models maas.opendatahub.io/gateway-access=true --overwrite`
+
 Create the provider credential Secret. This is done imperatively (never stored in manifests):
 
 [source,bash]

@@ -289,7 +289,34 @@ oc patch gateway maas-default-gateway -n openshift-ingress --type=merge -p '{
 This is tracked in link:https://redhat.atlassian.net/browse/RHOAIENG-68589[RHOAIENG-68589].
 ====
 
-*Step 5d:* Create Passthrough Route (Non-Cloud Platforms Only)
+*Step 5d:* Label namespaces for Gateway route binding
+
+The Gateway restricts HTTPRoute attachment to namespaces explicitly labeled with `maas.opendatahub.io/gateway-access=true`. This follows the principle of least privilege - only namespaces that are designated to expose services through the Gateway can create routes.
+
+[IMPORTANT]
+====
+Any namespace that needs to serve models through the MaaS Gateway must be labeled with `maas.opendatahub.io/gateway-access=true`. Without this label, HTTPRoutes created in that namespace will not be accepted by the Gateway and the model will not be reachable.
+
+If you create additional namespaces for model serving, remember to apply this label:
+
+[source,bash]
+----
+oc label namespace <your-namespace> \
+  maas.opendatahub.io/gateway-access=true --overwrite
+----
+====
+
+Label the `redhat-ods-applications` namespace where the MaaS API route is created:
+
+[source,bash]
+----
+oc label namespace redhat-ods-applications \
+  maas.opendatahub.io/gateway-access=true --overwrite
+----
+
+NOTE: Model namespaces (`llm`, `external-models`) are labeled in their respective deployment phases.
+
+*Step 5e:* Create Passthrough Route (Non-Cloud Platforms Only)
 
 If your platform type from Step 5a was `None`, `BareMetal`, or `OpenStack`, you must create a passthrough Route. This routes external traffic through the OpenShift ingress controller to the Gateway's LoadBalancer service.
 
@@ -390,7 +417,7 @@ $ oc get gateway maas-default-gateway -n openshift-ingress
 NAME                   CLASS               ADDRESS       PROGRAMMED   AGE
 maas-default-gateway   openshift-default   10.10.10.10   True         13m
 
-# (If you created a passthrough route in Step 5d)
+# (If you created a passthrough route in Step 5e)
 $ oc get route maas-default-gateway-https -n openshift-ingress -o jsonpath='{.status.ingress[0].conditions[?(@.type=="Admitted")].status}'
 True
 
