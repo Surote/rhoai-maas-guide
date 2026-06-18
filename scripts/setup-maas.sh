@@ -490,6 +490,9 @@ if should_run 2; then
             security.opendatahub.io/authorino-tls-bootstrap="true" --overwrite
         log_info "Gateway authorino-tls-bootstrap annotation applied"
     fi
+
+    # Label redhat-ods-applications for Gateway route binding (best practice: least privilege)
+    oc label namespace redhat-ods-applications maas.opendatahub.io/gateway-access=true --overwrite 2>/dev/null || true
 fi
 
 # =============================================================================
@@ -702,6 +705,7 @@ if should_run 5 && [ "$SKIP_MODELS" = false ]; then
             run_cmd oc create namespace llm
         fi
         oc label namespace llm opendatahub.io/generated-namespace=true --overwrite 2>/dev/null || true
+        oc label namespace llm maas.opendatahub.io/gateway-access=true --overwrite 2>/dev/null || true
         run_cmd oc apply -k "$MODEL_DIR/"
         log_info "Model manifests applied"
 

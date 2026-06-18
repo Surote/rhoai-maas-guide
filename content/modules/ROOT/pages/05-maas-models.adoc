@@ -81,7 +81,10 @@ Create the `llm` namespace if it doesn't exist and label it for RHOAI:
 ----
 oc create namespace llm
 oc label namespace llm opendatahub.io/generated-namespace=true --overwrite
+oc label namespace llm maas.opendatahub.io/gateway-access=true --overwrite
 ----
+
+IMPORTANT: The `maas.opendatahub.io/gateway-access` label is required for any namespace that serves models through the MaaS Gateway. Without it, the Gateway will not accept HTTPRoutes from this namespace and the model will not be reachable.
 
 Deploy the simulator (no GPU required):
 
