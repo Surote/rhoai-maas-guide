@@ -74,7 +74,45 @@ oc wait csv -n openshift-cluster-observability-operator \
   --for=jsonpath='{.status.phase}'=Succeeded --timeout=300s
 ----
 
-== Step 4: Apply Gateway Telemetry
+== Step 4: Enable DSCI Monitoring
+
+Now that all three observability operators are installed, configure the DSCI monitoring section to trigger the operator's observability cascade (MonitoringStack, ThanosQuerier, Perses, tracing):
+
+[source,bash]
+----
+oc patch dsci default-dsci --type=merge -p '{
+  "spec": {
+    "monitoring": {
+      "namespace": "redhat-ods-monitoring",
+      "metrics": {
+        "replicas": 1,
+        "storage": {
+          "size": "5Gi",
+          "retention": "90d"
+        }
+      },
+      "traces": {
+        "sampleRatio": "0.1",
+        "storage": {
+          "backend": "pv",
+          "retention": "2160h"
+        }
+      }
+    }
+  }
+}'
+----
+
+IMPORTANT: This step is required for the Observability Dashboard tab in the RHOAI UI to show metrics. Without it, the DSCI monitoring section remains empty (`metrics: {}`) and the dashboard has no data source.
+
+Wait for the DSCI to reconcile:
+
+[source,bash]
+----
+oc wait --for=jsonpath='{.status.phase}'=Ready dsci/default-dsci --timeout=300s
+----
+
+== Step 5: Apply Gateway Telemetry
 
 Once COO is installed and the MaaS gateway is running:
 

@@ -865,6 +865,36 @@ if should_run 7 && [ "$WITH_OBSERVABILITY" = true ]; then
         fi
     fi
 
+    # DSCI monitoring config
+    log_step "Enabling DSCI monitoring (metrics + traces)..."
+    run_cmd oc patch dsci default-dsci --type=merge -p '{
+      "spec": {
+        "monitoring": {
+          "namespace": "redhat-ods-monitoring",
+          "metrics": {
+            "replicas": 1,
+            "storage": {
+              "size": "5Gi",
+              "retention": "90d"
+            }
+          },
+          "traces": {
+            "sampleRatio": "0.1",
+            "storage": {
+              "backend": "pv",
+              "retention": "2160h"
+            }
+          }
+        }
+      }
+    }'
+    if [ "$DRY_RUN" = false ]; then
+        log_info "Waiting for DSCI to reconcile..."
+        oc wait --for=jsonpath='{.status.phase}'=Ready dsci/default-dsci --timeout=300s 2>/dev/null || \
+            log_warn "DSCI did not reach Ready within 300s (monitoring cascade may still be provisioning)"
+    fi
+    log_info "DSCI monitoring configured"
+
     # Telemetry
     log_step "Applying Gateway telemetry..."
     run_cmd oc apply -k "$MANIFESTS_DIR/07-observability/telemetry/"
