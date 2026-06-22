@@ -136,6 +136,7 @@ if ! oc get namespace llm &>/dev/null; then
 fi
 oc label namespace llm opendatahub.io/generated-namespace=true --overwrite 2>/dev/null || true
 oc label namespace llm maas.opendatahub.io/gateway-access=true --overwrite 2>/dev/null || true
+oc label namespace llm opendatahub.io/dashboard=true --overwrite 2>/dev/null || true
 log_info "llm namespace ready with required labels"
 
 # =============================================================================
