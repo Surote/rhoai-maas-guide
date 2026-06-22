@@ -1,0 +1,20 @@
+--- a/scripts/deploy-model.sh
++++ b/scripts/deploy-model.sh
+@@ -136,6 +136,7 @@
+ fi
+ oc label namespace llm opendatahub.io/generated-namespace=true --overwrite 2>/dev/null || true
+ oc label namespace llm maas.opendatahub.io/gateway-access=true --overwrite 2>/dev/null || true
++oc label namespace llm opendatahub.io/dashboard=true --overwrite 2>/dev/null || true
+ log_info "llm namespace ready with required labels"
+ 
+ # =============================================================================
+--- a/scripts/setup-maas.sh
++++ b/scripts/setup-maas.sh
+@@ -706,6 +706,7 @@
+         fi
+         oc label namespace llm opendatahub.io/generated-namespace=true --overwrite 2>/dev/null || true
+         oc label namespace llm maas.opendatahub.io/gateway-access=true --overwrite 2>/dev/null || true
++        oc label namespace llm opendatahub.io/dashboard=true --overwrite 2>/dev/null || true
+         run_cmd oc apply -k "$MODEL_DIR/"
+         log_info "Model manifests applied"
+ 
