@@ -334,7 +334,7 @@ envsubst '${CLUSTER_DOMAIN}' < manifests/03-maas-platform/openshift-gateway-setu
 ====
 *Why is this needed?*
 
-On non-cloud platforms, the Gateway's LoadBalancer service receives an IP from MetalLB (e.g., 10.10.10.10), but that IP is only routable within the cluster network. External traffic cannot reach it directly.
+On non-cloud platforms, the Gateway's LoadBalancer service receives an IP from MetalLB (e.g., 10.10.10.11), but that IP is only routable within the cluster network. External traffic cannot reach it directly.
 
 The passthrough Route bridges external requests (via the OpenShift router at your cluster's public DNS) to the internal LoadBalancer IP, allowing the Gateway to be accessible from outside the cluster.
 ====
@@ -415,7 +415,7 @@ openshift-default   openshift.io/gateway-controller/v1   True       23m
 
 $ oc get gateway maas-default-gateway -n openshift-ingress
 NAME                   CLASS               ADDRESS       PROGRAMMED   AGE
-maas-default-gateway   openshift-default   10.10.10.10   True         13m
+maas-default-gateway   openshift-default   10.10.10.11   True         13m
 
 # (If you created a passthrough route in Step 5e)
 $ oc get route maas-default-gateway-https -n openshift-ingress -o jsonpath='{.status.ingress[0].conditions[?(@.type=="Admitted")].status}'
