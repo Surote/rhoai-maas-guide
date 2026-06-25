@@ -706,6 +706,7 @@ if should_run 5 && [ "$SKIP_MODELS" = false ]; then
         fi
         oc label namespace llm opendatahub.io/generated-namespace=true --overwrite 2>/dev/null || true
         oc label namespace llm maas.opendatahub.io/gateway-access=true --overwrite 2>/dev/null || true
+        oc label namespace llm opendatahub.io/dashboard=true --overwrite 2>/dev/null || true
         run_cmd oc apply -k "$MODEL_DIR/"
         log_info "Model manifests applied"
 
