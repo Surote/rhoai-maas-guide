@@ -442,8 +442,9 @@ if should_run 2; then
                         if ! oc get ipaddresspool maas-pool -n metallb-system &>/dev/null; then
                             NODE_IP=$(oc get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || echo "")
                             if [ -n "$NODE_IP" ]; then
-                                METALLB_IP_RANGE="192.168.1.240-192.168.1.240"
-                                log_info "Creating MetalLB IPAddressPool: ${METALLB_IP_RANGE}"
+                                METALLB_IP=$(echo "$NODE_IP" | awk -F. '{printf "%s.%s.%s.%d", $1, $2, $3, $4+1}')
+                                METALLB_IP_RANGE="${METALLB_IP}-${METALLB_IP}"
+                                log_info "Creating MetalLB IPAddressPool: ${METALLB_IP_RANGE} (node IP: ${NODE_IP})"
                                 export METALLB_IP_RANGE
                                 envsubst '${METALLB_IP_RANGE}' < "$MANIFESTS_DIR/03-maas-platform/openshift-gateway-setup/metallb-config.yaml" | oc apply -f -
                             else

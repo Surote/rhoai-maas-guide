@@ -205,17 +205,20 @@ oc apply -f manifests/01-prerequisites/metallb/metallb.yaml
 
 Create IPAddressPool + L2Advertisement.  
 
-[NOTE]
+[IMPORTANT]
 ====
-The following instruction is for SNO clusters and uses the node's internal IP. +
-For multi-node clusters, adjust the range in `METALLB_IP_RANGE` to an unused IP range on your network.
+Do *not* use the node's own IP for the MetalLB pool. When a LoadBalancer service shares the node IP on port 443, kube-proxy iptables rules intercept internal cluster traffic meant for the OpenShift router (which serves `*.apps` routes on the same IP:port via hostNetwork). This breaks OAuth callbacks, console access, and any in-cluster traffic to routes.
+
+The command below derives an IP one address above the first node's InternalIP. For multi-node clusters or complex networks, adjust `METALLB_IP_RANGE` to an unused IP on the same L2 subnet.
 ====
 
 [source,bash]
 ----
-export METALLB_IP_RANGE="$(oc get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')-$(oc get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')"
+NODE_IP=$(oc get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+METALLB_IP=$(echo "$NODE_IP" | awk -F. '{printf "%s.%s.%s.%d", $1, $2, $3, $4+1}')
+export METALLB_IP_RANGE="${METALLB_IP}-${METALLB_IP}"
 
-echo $METALLB_IP_RANGE
+echo "Node IP: $NODE_IP  ->  MetalLB IP: $METALLB_IP_RANGE"
 
 envsubst < manifests/03-maas-platform/openshift-gateway-setup/metallb-config.yaml | oc apply -f -
 ----
