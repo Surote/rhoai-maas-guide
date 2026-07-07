@@ -2,4 +2,4 @@
 
 Configure DataScienceCluster, DSCInitialization, and Dashboard settings.
 
-Full documentation: https://rh-aiservices-bu.github.io/rhoai-maas-guide/modules/main/03-rhoai-config.html
+Full documentation: https://rh-aiservices-bu.github.io/rhoai-maas-guide/modules/main/04-rhoai-config.html
