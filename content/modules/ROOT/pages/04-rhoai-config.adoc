@@ -2,6 +2,10 @@
 
 Configure the RHOAI operator instances to enable Models-as-a-Service. Because the PostgreSQL database and `maas-db-config` secret already exist (xref:03-maas-platform.adoc[Phase 3]), the `maas-api` deployment will start healthy immediately.
 
+TIP: All file paths and `oc apply` commands in this guide are relative to the link:{repo-url}[rhoai-maas-guide] repository root. Make sure you have cloned it and are working from its root directory (see xref:index.adoc#_getting_started[Getting Started]).
+
+IMPORTANT: This guide is not a replacement for the link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/html-single/govern_llm_access_with_models-as-a-service/index[official {rhoai} {maas} documentation]. It is a companion resource with opinionated Kustomize manifests and automation scripts to accelerate deployment.
+
 == Prerequisites
 
 * RHOAI operator is installed and CSV is in `Succeeded` state

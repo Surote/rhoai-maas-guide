@@ -12,6 +12,10 @@ This phase adds *optional* observability enhancements on top of UWM:
 
 . *Gateway Telemetry* - per-model, per-user, per-subscription usage metrics on the MaaS gateway. Adds fine-grained labels (`model`, `user`, `subscription`, `organization_id`, `cost_center`) to gateway metrics for usage attribution and billing.
 
+TIP: All file paths and `oc apply` commands in this guide are relative to the link:{repo-url}[rhoai-maas-guide] repository root. Make sure you have cloned it and are working from its root directory (see xref:index.adoc#_getting_started[Getting Started]).
+
+IMPORTANT: This guide is not a replacement for the link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/html-single/govern_llm_access_with_models-as-a-service/index[official {rhoai} {maas} documentation]. It is a companion resource with opinionated Kustomize manifests and automation scripts to accelerate deployment.
+
 == Step 1: Install the Tempo Operator
 
 [source,bash]
