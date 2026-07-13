@@ -36,7 +36,7 @@ Each phase has step-by-step instructions, status gates, and troubleshooting.
 | Phase | Description | Time
 
 | xref:01-prerequisites.adoc[1. Prerequisites]
-| Operator subscriptions (RHOAI, RHCL, cert-manager, Service Mesh, LWS)
+| Operator subscriptions (RHOAI, RHCL, cert-manager, LWS)
 | 5-10 min
 
 | xref:02-platform-config.adoc[2. Platform Configuration]

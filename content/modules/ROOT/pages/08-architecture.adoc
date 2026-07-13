@@ -15,7 +15,7 @@ IMPORTANT: This guide is not a replacement for the link:https://docs.redhat.com/
 | Layer | Components | Role
 
 | *Gateway*
-| Gateway API, Istio (Service Mesh 3)
+| Gateway API, Istio
 | Entry point for all traffic. HTTPRoutes direct requests to the right model endpoint.
 
 | *Policy*
@@ -68,7 +68,7 @@ curl https://maas.${CLUSTER_DOMAIN}/v1/chat/completions \
 
 === 3. Gateway Receives the Request
 
-The request hits the `maas-default-gateway` in the `openshift-ingress` namespace. The Gateway API controller (backed by Istio/Service Mesh 3) matches the request against HTTPRoutes to determine which backend to forward to.
+The request hits the `maas-default-gateway` in the `openshift-ingress` namespace. The Gateway API controller (backed by Istio) matches the request against HTTPRoutes to determine which backend to forward to.
 
 === 4. Authorino Validates the API Key
 
