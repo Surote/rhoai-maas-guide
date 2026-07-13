@@ -256,7 +256,8 @@ if should_run 1; then
         log_info "Approving RHCL install plan (pinned to v1.3.4, Manual approval)..."
         if [ "$DRY_RUN" = false ]; then
             for attempt in $(seq 1 30); do
-                PENDING=$(oc get installplan -n openshift-operators --no-headers 2>/dev/null | grep -v "true" | awk '{print $1}')
+                PENDING=$(oc get installplan -n openshift-operators --no-headers 2>/dev/null \
+                    | grep "rhcl-operator" | grep -v "true" | awk '{print $1}' || true)
                 if [ -n "$PENDING" ]; then
                     echo "$PENDING" | xargs -I{} oc patch installplan {} -n openshift-operators \
                         --type=merge -p '{"spec":{"approved":true}}' 2>/dev/null || true
@@ -275,7 +276,6 @@ if should_run 1; then
                 "redhat-ods-operator operators.coreos.com/rhods-operator.redhat-ods-operator" \
                 "openshift-operators operators.coreos.com/rhcl-operator.openshift-operators" \
                 "cert-manager-operator operators.coreos.com/openshift-cert-manager-operator.cert-manager-operator" \
-                "openshift-operators operators.coreos.com/servicemeshoperator3.openshift-operators" \
                 "openshift-lws-operator operators.coreos.com/leader-worker-set.openshift-lws-operator"
             do
                 ns="${ns_label%% *}"
@@ -373,7 +373,7 @@ if should_run 2; then
     else
         log_step "Creating GatewayClass..."
         run_cmd oc apply -f "$MANIFESTS_DIR/02-platform-config/gatewayclass.yaml"
-        wait_for "GatewayClass accepted" 60 \
+        wait_for "GatewayClass accepted (openshift-ingress installs OSSM)" 300 \
             oc wait gatewayclass openshift-default \
             --for=jsonpath='{.status.conditions[?(@.type=="Accepted")].status}'=True
     fi
