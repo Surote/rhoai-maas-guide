@@ -6,4 +6,3 @@ resources:
   - connectivity-link/
   - leader-worker-set/
   - rhoai-operator/
-  - service-mesh/
