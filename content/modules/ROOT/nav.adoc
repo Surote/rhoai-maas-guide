@@ -20,5 +20,8 @@
 .Reference
 * xref:08-architecture.adoc[Architecture & Request Flow]
 
+.Cleanup
+* xref:09-cleanup.adoc[Cleanup & Teardown]
+
 .Tools
 * xref:claude-code.adoc[AI-Assisted Installation]

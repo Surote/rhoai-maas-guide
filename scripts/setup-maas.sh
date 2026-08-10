@@ -257,6 +257,7 @@ if should_run 1; then
         if [ "$DRY_RUN" = false ]; then
             for ns_label in \
                 "redhat-ods-operator operators.coreos.com/rhods-operator.redhat-ods-operator" \
+                "openshift-operators operators.coreos.com/rhcl-operator.openshift-operators" \
                 "cert-manager-operator operators.coreos.com/openshift-cert-manager-operator.cert-manager-operator" \
                 "openshift-lws-operator operators.coreos.com/leader-worker-set.openshift-lws-operator"
             do
@@ -265,44 +266,10 @@ if should_run 1; then
                 log_info "  Waiting for CSV in $ns..."
                 oc wait csv -n "$ns" -l "$label=" \
                     --for=jsonpath='{.status.phase}'=Succeeded --timeout=900s 2>/dev/null || \
-                    { log_error "  CSV in $ns did not reach Succeeded within 900s — aborting (re-run with --from-phase 1 after manual check)"; exit 1; }
+                    { log_error "  CSV in $ns did not reach Succeeded within 900s - aborting (re-run with --from-phase 1 after manual check)"; exit 1; }
             done
-
-            log_info "  Waiting for RHCL CSV in openshift-operators (Manual approval)..."
-            RHCL_APPROVED=false
-            RHCL_TIMEOUT=900
-            RHCL_ELAPSED=0
-            while [ $RHCL_ELAPSED -lt $RHCL_TIMEOUT ]; do
-                if [ "$RHCL_APPROVED" = false ]; then
-                    PLAN_NAME=$(oc get subscription rhcl-operator -n openshift-operators \
-                        -o jsonpath='{.status.installPlanRef.name}' 2>/dev/null || true)
-                    if [ -n "$PLAN_NAME" ]; then
-                        APPROVED=$(oc get installplan "$PLAN_NAME" -n openshift-operators \
-                            -o jsonpath='{.spec.approved}' 2>/dev/null || echo "true")
-                        if [ "$APPROVED" != "true" ]; then
-                            oc patch installplan "$PLAN_NAME" -n openshift-operators \
-                                --type=merge -p '{"spec":{"approved":true}}' 2>/dev/null || true
-                            log_info "  Install plan $PLAN_NAME approved"
-                        fi
-                        RHCL_APPROVED=true
-                    fi
-                fi
-                RHCL_PHASE=$(oc get csv -n openshift-operators -l 'operators.coreos.com/rhcl-operator.openshift-operators=' \
-                    --no-headers -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "")
-                if [ "$RHCL_PHASE" = "Succeeded" ]; then
-                    log_info "  RHCL CSV: Succeeded"
-                    break
-                fi
-                sleep 5
-                RHCL_ELAPSED=$((RHCL_ELAPSED + 5))
-                [ $((RHCL_ELAPSED % 60)) -eq 0 ] && log_info "    Still waiting for RHCL... (${RHCL_ELAPSED}s)"
-            done
-            if [ "$RHCL_PHASE" != "Succeeded" ]; then
-                log_error "  CSV in openshift-operators did not reach Succeeded within ${RHCL_TIMEOUT}s — aborting (re-run with --from-phase 1 after manual check)"
-                exit 1
-            fi
         else
-            log_info "[DRY RUN] Would approve RHCL install plan"
+            log_info "[DRY RUN] Would wait for operator CSVs"
         fi
         log_info "All operator CSVs ready"
     fi
