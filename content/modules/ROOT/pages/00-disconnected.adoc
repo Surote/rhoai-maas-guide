@@ -62,7 +62,7 @@ The MaaS guide adds 9 operators and several container images that are NOT part o
 
 == Additional images to mirror
 
-IMPORTANT: The vLLM CUDA runtime is published under `registry.redhat.io/rhaii/` (double 'i', no trailing 's'). Some upstream references incorrectly use `rhaiis/` - this will fail on disconnected clusters because the IDMS only covers `rhaii/`. The model manifests in this guide already use the correct `rhaii/` path with a pinned digest.
+IMPORTANT: The vLLM CUDA runtime is published under `registry.redhat.io/rhaii/` (double 'i', no trailing 's'). Some upstream references incorrectly use `rhaiis/` - this will fail on disconnected clusters because the IDMS only covers `rhaii/`. The model manifests in this guide already use the correct `rhaii/` path with a pinned digest. See link:https://redhat.atlassian.net/browse/RHOAIENG-82814[RHOAIENG-82814].
 
 Images not discoverable through operator bundles:
 
