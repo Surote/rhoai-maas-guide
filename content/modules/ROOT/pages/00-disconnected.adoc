@@ -370,6 +370,34 @@ yum install -y rpm-build createrepo_c
 # Create a yum repo from the RPMs
 mkdir -p /tmp/kernel-repo/rpms
 cp ~/rpmbuild/RPMS/x86_64/kernel*.rpm /tmp/kernel-repo/rpms/
+----
+
+==== Download CUDA development packages
+
+The NVIDIA driver container also needs CUDA development packages (`cuda-devel`, `cuda-nvcc`, `cuda-cudart-devel`) to compile. On a connected cluster the driver pod downloads these from `developer.download.nvidia.com`. On a fully air-gapped cluster that is unreachable, so the CUDA RPMs must be included in the same local repo.
+
+On a connected host with access to the NVIDIA CUDA repo:
+
+[source,bash]
+----
+# Add the NVIDIA CUDA repo (if not already configured)
+dnf config-manager --add-repo \
+  https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo
+
+# Download the CUDA packages and their dependencies
+dnf download --resolve --destdir /tmp/cuda-rpms \
+  cuda-devel-12-6 cuda-nvcc-12-6 cuda-cudart-devel-12-6
+
+# Copy them into the same repo directory as the kernel RPMs
+cp /tmp/cuda-rpms/*.rpm /tmp/kernel-repo/rpms/
+----
+
+TIP: The CUDA version must match what the GPU operator expects. Check the driver container image tag or the `CUDA_VERSION` env var in the ClusterPolicy to find the right version.
+
+Generate the repo metadata:
+
+[source,bash]
+----
 createrepo_c /tmp/kernel-repo/rpms/
 ----
 
@@ -383,7 +411,7 @@ cd /tmp/kernel-repo/rpms && python3 -m http.server 8088 &
 # Create a ConfigMap with the repo config
 oc create configmap kernel-repo-config -n nvidia-gpu-operator \
   --from-literal=local-kernel.repo="[local-kernel]
-name=Local Kernel Packages from DTK
+name=Local Kernel and CUDA Packages
 baseurl=http://<bastion-ip>:8088/
 enabled=1
 gpgcheck=0
@@ -396,7 +424,7 @@ oc patch clusterpolicy gpu-cluster-policy --type=merge \
 
 Replace `<bastion-ip>` with the IP of the host serving the repo. The GPU driver pod must be able to reach this host on port 8088.
 
-NOTE: The NVIDIA CUDA repo (`developer.download.nvidia.com`) must also be reachable from the GPU node for CUDA headers. If using a proxy, add this domain to the allow list. If fully air-gapped, the CUDA development packages must also be included in the local repo.
+IMPORTANT: The HTTP repo must stay running for the lifetime of the GPU nodes. The NVIDIA driver pod runs `dnf install` every time it starts - on node reboots, MachineSet scale-ups, operator upgrades, or ClusterPolicy changes. If the repo is gone, driver compilation fails and the GPU stays unusable. For production use, serve the repo from a persistent service (httpd container, nginx pod, or a proper artifact server) instead of a background `python3` process.
 
 ==== Verify the driver
 
