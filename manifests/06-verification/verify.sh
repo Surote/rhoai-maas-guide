@@ -387,7 +387,7 @@ spec:
     containers:
       - name: main
         image: "ghcr.io/llm-d/llm-d-inference-sim:v0.7.1"
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         command: ["/app/llm-d-inference-sim"]
         args:
           - --port
