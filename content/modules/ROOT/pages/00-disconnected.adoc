@@ -62,6 +62,8 @@ The MaaS guide adds 9 operators and several container images that are NOT part o
 
 == Additional images to mirror
 
+IMPORTANT: The vLLM CUDA runtime is published under `registry.redhat.io/rhaii/` (double 'i', no trailing 's'). Some upstream references incorrectly use `rhaiis/` - this will fail on disconnected clusters because the IDMS only covers `rhaii/`. The model manifests in this guide already use the correct `rhaii/` path with a pinned digest.
+
 Images not discoverable through operator bundles:
 
 [cols="1,2", options="header"]
@@ -70,6 +72,9 @@ Images not discoverable through operator bundles:
 
 | `registry.redhat.io/rhel9/postgresql-16@sha256:3943...` (pinned digest)
 | MaaS PostgreSQL database
+
+| `registry.redhat.io/rhaii/vllm-cuda-rhel9@sha256:5800...` (pinned digest)
+| vLLM CUDA runtime for GPU models
 
 | `ghcr.io/llm-d/llm-d-inference-sim:v0.7.1`
 | Simulator runtime (CPU-only model)
@@ -154,36 +159,28 @@ oc patch catalogsource redhat-operators -n openshift-marketplace \
 
 `oc-mirror` creates ImageDigestMirrorSet (IDMS) entries for images referenced by digest, but OCI modelcar images use tags (e.g. `:3.0`, `:1.5`). CRI-O needs an ImageTagMirrorSet (ITMS) to redirect tag-based pulls to the mirror registry.
 
-Check if ITMS entries already exist for the `rhai` and `rhelai1` namespaces:
+A ready-to-use ITMS manifest is provided at `manifests/00-disconnected/itms-maas-modelcars.yaml`. It covers `rhai/`, `rhelai1/`, and `ghcr.io/llm-d` namespaces.
+
+Check if ITMS entries already exist:
 
 [source,bash]
 ----
 oc get imagetagmirrorset -o yaml | grep -E 'registry.redhat.io/rhai|registry.redhat.io/rhelai1'
 ----
 
-If no ITMS entries exist for these namespaces, create them:
+If no ITMS entries exist, apply the manifest (replace the placeholder with your mirror address):
 
 [source,bash]
 ----
-cat <<EOF | oc apply -f -
-apiVersion: config.openshift.io/v1
-kind: ImageTagMirrorSet
-metadata:
-  name: itms-maas-modelcars
-spec:
-  imageTagMirrors:
-  - mirrors:
-    - <mirror-registry>:<port>/<namespace>/rhai
-    source: registry.redhat.io/rhai
-  - mirrors:
-    - <mirror-registry>:<port>/<namespace>/rhelai1
-    source: registry.redhat.io/rhelai1
-EOF
+sed 's|MIRROR_REGISTRY:PORT/NAMESPACE|<your-registry>:<port>/<ns>|g' \
+  manifests/00-disconnected/itms-maas-modelcars.yaml | oc apply -f -
 ----
 
-Replace `<mirror-registry>:<port>/<namespace>` with your mirror registry address (the same one used in Step 3).
+Replace `<your-registry>:<port>/<ns>` with your mirror registry address (the same one used in Step 3).
 
 IMPORTANT: Applying ITMS triggers a MachineConfig update. Worker nodes will reboot in a rolling fashion. Wait for `oc get mcp worker` to show `UPDATED=True` before continuing.
+
+TIP: Batch all ITMS/IDMS changes into a single `oc apply`. Do not add them incrementally - each apply triggers a separate MachineConfig rollout with node reboots.
 
 == Step 6: Verify
 
@@ -233,6 +230,90 @@ oc get nodes -l nvidia.com/gpu.present=true
 ----
 
 The default instance type is `g5.2xlarge` (1x A10G, 24 GB VRAM) - enough for Gemma 2 9B FP8. Edit the template to use `g5.12xlarge` (4x A10G, 96 GB VRAM) for larger models.
+
+== GPU driver compilation on disconnected
+
+The NVIDIA GPU operator compiles the kernel module at runtime. In a disconnected environment, the driver container cannot reach external repos for the required kernel packages (`kernel-headers`, `kernel-devel`, and `kernel` with vmlinuz). The standard UBI repos do not ship kernel packages.
+
+The solution is to extract the kernel files from the Driver Toolkit (DTK) image - which is part of the OCP release and already mirrored - build local RPMs, and serve them via a local HTTP repo.
+
+=== Step 1: Find the DTK image
+
+[source,bash]
+----
+DTK_IMAGE=$(oc adm release info --image-for=driver-toolkit)
+echo "DTK: $DTK_IMAGE"
+----
+
+=== Step 2: Extract kernel packages from DTK
+
+On a host that can pull from the mirror registry:
+
+[source,bash]
+----
+KERNEL_VERSION=$(uname -r)  # or get from: oc debug node/<gpu-node> -- chroot /host uname -r
+
+# Create a container from the DTK and copy kernel files
+podman create --name dtk-extract $DTK_IMAGE
+podman cp dtk-extract:/usr/src/kernels/${KERNEL_VERSION} /tmp/kernel-src/
+podman cp dtk-extract:/usr/include /tmp/kernel-headers/
+podman cp dtk-extract:/lib/modules/${KERNEL_VERSION} /tmp/kernel-modules/
+podman rm dtk-extract
+----
+
+=== Step 3: Build RPMs and create a local repo
+
+[source,bash]
+----
+# Install rpmbuild and createrepo_c
+yum install -y rpm-build createrepo_c
+
+# Build kernel-devel, kernel-headers and kernel RPMs from the extracted files
+# (use rpmbuild with custom spec files that package the DTK files)
+# See the rhoai-maas-guide repo for example spec files
+
+# Create a yum repo from the RPMs
+mkdir -p /tmp/kernel-repo/rpms
+cp ~/rpmbuild/RPMS/x86_64/kernel*.rpm /tmp/kernel-repo/rpms/
+createrepo_c /tmp/kernel-repo/rpms/
+----
+
+=== Step 4: Serve the repo and configure the GPU operator
+
+[source,bash]
+----
+# Serve the repo over HTTP (from a host reachable by the GPU node)
+cd /tmp/kernel-repo/rpms && python3 -m http.server 8088 &
+
+# Create a ConfigMap with the repo config
+oc create configmap kernel-repo-config -n nvidia-gpu-operator \
+  --from-literal=local-kernel.repo="[local-kernel]
+name=Local Kernel Packages from DTK
+baseurl=http://<bastion-ip>:8088/
+enabled=1
+gpgcheck=0
+priority=1"
+
+# Patch the ClusterPolicy to use the repo
+oc patch clusterpolicy gpu-cluster-policy --type=merge \
+  -p '{"spec":{"driver":{"repoConfig":{"configMapName":"kernel-repo-config"}}}}'
+----
+
+Replace `<bastion-ip>` with the IP of the host serving the repo. The GPU driver pod must be able to reach this host on port 8088.
+
+NOTE: The NVIDIA CUDA repo (`developer.download.nvidia.com`) must also be reachable from the GPU node for CUDA headers. If using a proxy, add this domain to the allow list. If fully air-gapped, the CUDA development packages must also be included in the local repo.
+
+=== Step 5: Verify the driver
+
+[source,bash]
+----
+# Wait for the driver pod to complete compilation
+oc get pods -n nvidia-gpu-operator -l app=nvidia-driver-daemonset -w
+
+# Verify GPU is available
+oc get nodes -l nvidia.com/gpu.present=true \
+  -o jsonpath='{.items[*].status.allocatable.nvidia\.com/gpu}'
+----
 
 == Certificates
 
