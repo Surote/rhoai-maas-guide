@@ -2,6 +2,8 @@
 
 NOTE: This phase requires a completed MaaS installation (through xref:04-rhoai-config.adoc[Phase 4]) and at least one local model deployed (xref:05-maas-models.adoc[Phase 5]) to validate the gateway is functional.
 
+WARNING: This phase is NOT compatible with disconnected/air-gapped environments. External models require internet access to reach third-party APIs (OpenAI, Bedrock, Gemini). If you are running in disconnected mode, skip this phase entirely.
+
 The `ExternalModel` CRD lets you expose third-party LLM APIs (OpenAI, AWS Bedrock, Google Gemini, Azure OpenAI, etc.) through the MaaS gateway. External models get the same API key management, authentication, rate limiting, and usage tracking as locally-served models - your consumers use a single gateway endpoint regardless of where the model runs.
 
 TIP: All file paths and `oc apply` commands in this guide are relative to the link:{repo-url}[rhoai-maas-guide] repository root. Make sure you have cloned it and are working from its root directory (see xref:index.adoc#_getting_started[Getting Started]).
