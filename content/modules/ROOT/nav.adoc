@@ -17,6 +17,9 @@
 .External Models
 * xref:08-external-models.adoc[Phase 8: External Models]
 
+.Disconnected Setup
+* xref:00-disconnected.adoc[Disconnected Setup (Air-Gapped)]
+
 .Reference
 * xref:08-architecture.adoc[Architecture & Request Flow]
 
