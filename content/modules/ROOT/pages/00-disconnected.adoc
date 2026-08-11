@@ -424,7 +424,7 @@ oc patch clusterpolicy gpu-cluster-policy --type=merge \
 
 Replace `<bastion-ip>` with the IP of the host serving the repo. The GPU driver pod must be able to reach this host on port 8088.
 
-IMPORTANT: The HTTP repo must stay running for the lifetime of the GPU nodes. The NVIDIA driver pod runs `dnf install` every time it starts - on node reboots, MachineSet scale-ups, operator upgrades, or ClusterPolicy changes. If the repo is gone, driver compilation fails and the GPU stays unusable. For production use, serve the repo from a persistent service (httpd container, nginx pod, or a proper artifact server) instead of a background `python3` process.
+IMPORTANT: The HTTP repo must stay running for the lifetime of the GPU nodes. The NVIDIA driver pod runs `dnf install` every time it starts - on node reboots, MachineSet scale-ups, operator upgrades, or ClusterPolicy changes. If the repo is gone, driver compilation fails and the GPU stays unusable. For production use, serve the repo from a persistent service (httpd container, nginx pod, or a proper artifact server) instead of a background `python3` process. We opened link:https://redhat.atlassian.net/browse/RHOAIENG-82815[RHOAIENG-82815] to track finding a better long-term solution for this.
 
 ==== Verify the driver
 
