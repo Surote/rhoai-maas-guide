@@ -17,6 +17,8 @@ This guide assumes:
 
 The MaaS guide adds 9 operators and several container images that are NOT part of the base RHOAI mirror set. This phase mirrors those extra components.
 
+TIP: Currently, `oc-mirror` mirrors all images referenced in the RHOAI operator bundle regardless of which DSC components you enable. There is an initiative (link:https://redhat.atlassian.net/browse/RHOAIENG-75890[RHOAIENG-75890] / link:https://redhat.atlassian.net/browse/OCPSTRAT-3350[OCPSTRAT-3350]) to support selective mirroring - so you can mirror only the images for the components you need (e.g. Dashboard + MaaS). Until that lands, this guide mirrors the full set.
+
 == MaaS operators to mirror
 
 [cols="1,1,1", options="header"]
