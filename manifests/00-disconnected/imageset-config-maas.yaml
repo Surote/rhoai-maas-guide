@@ -38,6 +38,10 @@ mirror:
           defaultChannel: stable-v1
           channels:
             - name: stable-v1
+        # OSSM3 -- only needed on OCP < 4.20.32.
+        # On OCP >= 4.20.32, the openshift-ingress operator embeds the Istio
+        # sail library directly and no OSSM OLM operator is installed.
+        # The istiod/proxyv2 images for >= 4.20.32 are in additionalImages.
         - name: servicemeshoperator3
           defaultChannel: stable
           channels:
@@ -123,3 +127,25 @@ mirror:
     - name: registry.redhat.io/rhai/modelcar-granite-4-0-h-tiny-fp8-dynamic:3.0
     - name: registry.redhat.io/rhelai1/modelcar-gpt-oss-20b:1.5
     - name: registry.redhat.io/rhelai1/modelcar-gemma-2-9b-it-fp8:1.5
+    # -- Istio images for OCP >= 4.20.32 (embedded sail library) ----------------
+    # On OCP >= 4.20.32, the openshift-ingress operator embeds the Istio sail
+    # library and pulls istiod + proxyv2 from registry.redhat.io. These images
+    # are NOT in the OCP release payload and NOT in any operator catalog. They
+    # must be mirrored explicitly for disconnected clusters.
+    #
+    # The digests change per OCP z-stream. Discover them from a connected
+    # reference cluster after creating a Gateway (which triggers istiod):
+    #
+    #   # istiod (control plane)
+    #   oc get deployment -n openshift-ingress -l app=istiod \
+    #     -o jsonpath='{.items[0].spec.template.spec.containers[0].image}'
+    #
+    #   # proxyv2 (data plane / gateway proxy)
+    #   oc get deployment -n openshift-ingress -l istio.io/gateway-name \
+    #     -o jsonpath='{.items[0].spec.template.spec.containers[0].image}'
+    #
+    # Replace the <ISTIOD_DIGEST> and <PROXYV2_DIGEST> placeholders below.
+    # On OCP < 4.20.32, servicemeshoperator3 covers these - leave the
+    # placeholders as-is or remove these lines.
+    - name: registry.redhat.io/openshift-service-mesh/istio-pilot-rhel9@sha256:<ISTIOD_DIGEST>
+    - name: registry.redhat.io/openshift-service-mesh/proxyv2-rhel9@sha256:<PROXYV2_DIGEST>
