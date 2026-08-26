@@ -438,7 +438,7 @@ if should_run 2; then
     else
         log_step "Creating GatewayClass..."
         run_cmd oc apply -f "$MANIFESTS_DIR/02-platform-config/gatewayclass.yaml"
-        wait_for "GatewayClass accepted (openshift-ingress installs OSSM)" 300 \
+        wait_for "GatewayClass accepted (openshift-ingress provisions Istio)" 300 \
             oc wait gatewayclass openshift-default \
             --for=jsonpath='{.status.conditions[?(@.type=="Accepted")].status}'=True
     fi

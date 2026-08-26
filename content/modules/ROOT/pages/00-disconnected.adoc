@@ -11,7 +11,7 @@ A disconnected {ocp-short} cluster pulls all container images from a private mir
 This guide assumes:
 
 * {ocp-short} 4.20+ is already installed in disconnected mode
-* {rhoai} 3.4 operators are installed (rhods-operator, cert-manager, OSSM3, NFD, GPU operator)
+* {rhoai} 3.4 operators are installed (rhods-operator, cert-manager, NFD, GPU operator)
 * A mirror registry is running and the cluster trusts its CA
 * ImageDigestMirrorSet (IDMS) and CatalogSources from the RHOAI mirror are already applied
 
@@ -92,6 +92,12 @@ Images not discoverable through operator bundles:
 
 | `registry.redhat.io/rhelai1/modelcar-gemma-2-9b-it-fp8:1.5`
 | Gemma 2 9B IT FP8 model weights
+
+| `registry.redhat.io/openshift-service-mesh/istio-pilot-rhel9@sha256:...` (pinned digest)
+| Istiod control plane ({ocp-short} >= 4.20.32 only, see <<istiod-images>>)
+
+| `registry.redhat.io/openshift-service-mesh/proxyv2-rhel9@sha256:...` (pinned digest)
+| Envoy proxy / gateway data plane ({ocp-short} >= 4.20.32 only, see <<istiod-images>>)
 |===
 
 IMPORTANT: The WASM shim image lives on `registry.access.redhat.com` (not `registry.redhat.io`). This is a different registry. The WASM shim digest changes with each RHCL operator version - see <<wasm-shim>> for how to discover it.
@@ -115,6 +121,28 @@ oc get csv -n openshift-operators \
 
 # Replace the placeholder in imageset-config-maas.yaml with the digest
 ----
+
+[[istiod-images]]
+On {ocp-short} 4.20.32 and later, the openshift-ingress operator embeds the Istio sail library instead of installing a standalone OSSM operator. The istiod and proxyv2 images it pulls are NOT in the OCP release payload and NOT in any operator catalog. They must be mirrored explicitly.
+
+NOTE: On {ocp-short} < 4.20.32, the `servicemeshoperator3` catalog entry covers these images and you can skip this block.
+
+To discover the digests, you need a connected reference cluster running the same {ocp-short} version with a Gateway already created (creating a Gateway triggers istiod provisioning):
+
+[source,bash]
+----
+# istiod (control plane)
+oc get deployment -n openshift-ingress -l app=istiod \
+  -o jsonpath='{.items[0].spec.template.spec.containers[0].image}'
+
+# proxyv2 (data plane / gateway proxy)
+oc get deployment -n openshift-ingress -l istio.io/gateway-name \
+  -o jsonpath='{.items[0].spec.template.spec.containers[0].image}'
+----
+
+Replace `<ISTIOD_DIGEST>` and `<PROXYV2_DIGEST>` in `imageset-config-maas.yaml` with the digests from the commands above.
+
+TIP: If you do not have a connected reference cluster with a Gateway, check the {ocp-short} release notes for your z-stream. The istiod and proxyv2 images are listed under the Service Mesh / Gateway API components.
 
 On a connected system (jump box) with `oc-mirror` v2 and a valid pull secret:
 
@@ -529,6 +557,22 @@ applying deny RBAC filter
 
 * The cluster proxy trusted CA bundle: `oc get proxy/cluster -o jsonpath='{.spec.trustedCA.name}'`
 * The `additionalTrustedCA` in `image.config.openshift.io/cluster`
+
+=== Istiod / gateway pod ImagePullBackOff ({ocp-short} >= 4.20.32)
+
+**Symptom:** After creating the MaaS gateway, the istiod deployment or gateway proxy pod in `openshift-ingress` shows `ImagePullBackOff` or `ErrImagePull` with errors referencing `registry.redhat.io/openshift-service-mesh/istio-pilot-rhel9` or `proxyv2-rhel9`.
+
+**Cause:** On {ocp-short} >= 4.20.32, the openshift-ingress operator embeds the Istio sail library and pulls istiod/proxyv2 images directly from `registry.redhat.io`. These images are not in the OCP release payload and not in any operator catalog. Without explicit mirroring, the disconnected cluster cannot pull them.
+
+**Fix:** Mirror the istiod and proxyv2 images as described in <<istiod-images>>. Discover the correct digests from a connected reference cluster, add them to `imageset-config-maas.yaml`, re-run oc-mirror, and apply the updated IDMS.
+
+After the IDMS is applied and nodes reboot, delete the failed pods so they retry with the new mirror configuration:
+
+[source,bash]
+----
+oc delete pods -n openshift-ingress -l app=istiod
+oc delete pods -n openshift-ingress -l istio.io/gateway-name=maas-default-gateway
+----
 
 === Certificates
 
