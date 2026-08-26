@@ -4,7 +4,7 @@ Configure the RHOAI operator instances to enable Models-as-a-Service. Because th
 
 TIP: All file paths and `oc apply` commands in this guide are relative to the link:{repo-url}[rhoai-maas-guide] repository root. Make sure you have cloned it and are working from its root directory (see xref:index.adoc#_getting_started[Getting Started]).
 
-IMPORTANT: This guide is not a replacement for the link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/index[official {rhoai} {maas} documentation]. It is a companion resource with opinionated Kustomize manifests and automation scripts to accelerate deployment.
+IMPORTANT: This guide is not a replacement for the official {rhoai} {maas} documentation (link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/govern_llm_access_with_models-as-a-service/index[3.5] | link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/index[3.4]). It is a companion resource with opinionated Kustomize manifests and automation scripts to accelerate deployment.
 
 == Prerequisites
 
@@ -48,10 +48,30 @@ oc wait --for=jsonpath='{.status.phase}'=Ready \
 
 Create the Data Science Cluster:
 
+[tabs]
+====
+RHOAI 3.5+::
++
+--
 [source,bash]
 ----
 oc apply -f manifests/04-rhoai-config/datasciencecluster.yaml
 ----
+
+Enables MaaS via `aigateway.modelsAsAService: Managed`, the modularized path for RHOAI 3.5+.
+--
+
+RHOAI 3.4::
++
+--
+[source,bash]
+----
+oc apply -f manifests/04-rhoai-config/datasciencecluster-34.yaml
+----
+
+WARNING: The `kserve.modelsAsService` DSC path is deprecated in RHOAI 3.5 and replaced by `aigateway.modelsAsAService`. Plan your migration to the 3.5+ manifest.
+--
+====
 
 Apply the GPU HardwareProfile so RHOAI properly schedules GPU workloads:
 
@@ -104,10 +124,28 @@ Expected CRDs:
 
 Since PostgreSQL and the `maas-db-config` secret were created in Phase 3, the `maas-api` deployment should start healthy:
 
+[tabs]
+====
+RHOAI 3.5+::
++
+--
+[source,bash]
+----
+oc rollout status deployment/maas-api -n redhat-ai-gateway-infra --timeout=120s
+----
+
+In RHOAI 3.5+, `maas-api` runs in the `redhat-ai-gateway-infra` namespace.
+--
+
+RHOAI 3.4::
++
+--
 [source,bash]
 ----
 oc rollout status deployment/maas-api -n redhat-ods-applications --timeout=120s
 ----
+--
+====
 
 TIP: The `maas-api` deployment may take 30-60 seconds to appear after the DSC is applied. If it is not found, wait and retry.
 
