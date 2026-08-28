@@ -4,7 +4,7 @@ End-to-end verification of a MaaS ({maas}) deployment on {ocp-short}.
 
 TIP: All file paths and `oc apply` commands in this guide are relative to the link:{repo-url}[rhoai-maas-guide] repository root. Make sure you have cloned it and are working from its root directory (see xref:index.adoc#_getting_started[Getting Started]).
 
-IMPORTANT: This guide is not a replacement for the link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/index[official {rhoai} {maas} documentation]. It is a companion resource with opinionated Kustomize manifests and automation scripts to accelerate deployment.
+IMPORTANT: This guide is not a replacement for the official {rhoai} {maas} documentation (link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/govern_llm_access_with_models-as-a-service/index[3.5] | link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/index[3.4]). It is a companion resource with opinionated Kustomize manifests and automation scripts to accelerate deployment.
 
 == What it tests
 
@@ -63,6 +63,37 @@ If you prefer to verify each phase manually:
 
 === Phase 1: Infrastructure health
 
+[tabs]
+====
+RHOAI 3.5+::
++
+--
+[source,bash]
+----
+# Gateway
+oc get gateway maas-default-gateway -n openshift-ingress \
+  -o jsonpath='{.status.conditions[?(@.type=="Programmed")].status}'
+
+# Core deployments (maas-api is in redhat-ai-gateway-infra on 3.5+)
+oc get deployment postgres maas-controller -n redhat-ods-applications
+oc get deployment maas-api -n redhat-ai-gateway-infra
+
+# Authorino
+oc get deployment authorino -n kuadrant-system
+
+# DSC condition (ModelsAsAServiceReady on 3.5+)
+oc get datasciencecluster default-dsc \
+  -o jsonpath='{.status.conditions[?(@.type=="ModelsAsAServiceReady")].status}'
+
+# Health endpoint
+DOMAIN=$(oc get ingresses.config/cluster -o jsonpath='{.spec.domain}')
+curl -sk "https://maas.${DOMAIN}/maas-api/health"
+----
+--
+
+RHOAI 3.4::
++
+--
 [source,bash]
 ----
 # Gateway
@@ -83,6 +114,8 @@ oc get datasciencecluster default-dsc \
 DOMAIN=$(oc get ingresses.config/cluster -o jsonpath='{.spec.domain}')
 curl -sk "https://maas.${DOMAIN}/maas-api/health"
 ----
+--
+====
 
 === Phase 2: Deploy simulator model
 

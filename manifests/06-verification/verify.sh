@@ -79,6 +79,13 @@ done
 NAMESPACE=redhat-ods-applications
 MODEL_NS=llm
 MAAS_NS=models-as-a-service
+
+# Auto-detect maas-api namespace (3.5+ uses redhat-ai-gateway-infra)
+if oc get deployment maas-api -n redhat-ai-gateway-infra &>/dev/null; then
+    MAAS_API_NS=redhat-ai-gateway-infra
+else
+    MAAS_API_NS="$NAMESPACE"
+fi
 MODEL_NAME=facebook-opt-125m-simulated
 
 if [ "$DISCONNECTED" = true ]; then
@@ -237,7 +244,7 @@ else
 fi
 
 # maas-api
-MAAS_API_READY=$(oc get deployment maas-api -n "$NAMESPACE" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+MAAS_API_READY=$(oc get deployment maas-api -n "$MAAS_API_NS" -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
 if [ "${MAAS_API_READY:-0}" -ge 1 ]; then
     log_pass "maas-api is running ($MAAS_API_READY replica(s))"
 else
@@ -260,12 +267,15 @@ else
     log_fail "Authorino not ready"
 fi
 
-# ModelsAsServiceReady
-MAAS_READY=$(oc get datasciencecluster default-dsc -o jsonpath='{.status.conditions[?(@.type=="ModelsAsServiceReady")].status}' 2>/dev/null || echo "Unknown")
+# ModelsAsServiceReady (3.4) or ModelsAsAServiceReady (3.5+)
+MAAS_READY=$(oc get datasciencecluster default-dsc -o jsonpath='{.status.conditions[?(@.type=="ModelsAsServiceReady")].status}' 2>/dev/null || echo "")
+if [ -z "$MAAS_READY" ]; then
+    MAAS_READY=$(oc get datasciencecluster default-dsc -o jsonpath='{.status.conditions[?(@.type=="ModelsAsAServiceReady")].status}' 2>/dev/null || echo "Unknown")
+fi
 if [ "$MAAS_READY" = "True" ]; then
-    log_pass "ModelsAsServiceReady=True"
+    log_pass "ModelsAs(A)ServiceReady=True"
 else
-    log_fail "ModelsAsServiceReady=$MAAS_READY"
+    log_fail "ModelsAs(A)ServiceReady=$MAAS_READY"
 fi
 
 # Health endpoint (try with --resolve to bypass DNS cache for cloud LB hostnames)

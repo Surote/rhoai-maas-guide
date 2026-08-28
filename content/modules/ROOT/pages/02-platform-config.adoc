@@ -6,7 +6,7 @@ Apply each step in order and wait for the status gates before proceeding to the 
 
 TIP: All file paths and `oc apply` commands in this guide are relative to the link:{repo-url}[rhoai-maas-guide] repository root. Make sure you have cloned it and are working from its root directory (see xref:index.adoc#_getting_started[Getting Started]).
 
-IMPORTANT: This guide is not a replacement for the link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/index[official {rhoai} {maas} documentation]. It is a companion resource with opinionated Kustomize manifests and automation scripts to accelerate deployment.
+IMPORTANT: This guide is not a replacement for the official {rhoai} {maas} documentation (link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/govern_llm_access_with_models-as-a-service/index[3.5] | link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/index[3.4]). It is a companion resource with opinionated Kustomize manifests and automation scripts to accelerate deployment.
 
 == Prerequisites
 
@@ -58,7 +58,7 @@ oc wait --for=condition=Ready kuadrant/kuadrant -n kuadrant-system --timeout=180
 
 == Step 2: Configure TLS for Models-as-a-Service
 
-Now that Kuadrant is deployed, we need to update the Authorino CR to enable TLS. (Detailed documentation for this step is available in the link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/deploy-and-manage-models-as-a-service_maas#configure-tls-for-maas_maas-deploy[RHOAI 3.4 docs section 1.4]. )
+Now that Kuadrant is deployed, we need to update the Authorino CR to enable TLS. (Detailed documentation for this step is available in the RHOAI docs: link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/govern_llm_access_with_models-as-a-service/deploy-and-manage-models-as-a-service_maas#configure-tls-for-maas_maas-deploy[3.5] | link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/deploy-and-manage-models-as-a-service_maas#configure-tls-for-maas_maas-deploy[3.4].)
 Follow the four steps below to enable TLS between the Gateway and Authorino.
 
 *Step 2a:* The service annotation (already applied above) triggered the service-ca operator to generate the `authorino-server-cert` TLS Secret:
@@ -310,13 +310,32 @@ oc label namespace <your-namespace> \
 ----
 ====
 
-Label the `redhat-ods-applications` namespace where the MaaS API route is created:
+Label the namespace where the MaaS API route is created:
 
+[tabs]
+====
+RHOAI 3.5+::
++
+--
+[source,bash]
+----
+oc label namespace redhat-ai-gateway-infra \
+  maas.opendatahub.io/gateway-access=true --overwrite
+----
+
+In RHOAI 3.5+, the MaaS API route is created in `redhat-ai-gateway-infra`.
+--
+
+RHOAI 3.4::
++
+--
 [source,bash]
 ----
 oc label namespace redhat-ods-applications \
   maas.opendatahub.io/gateway-access=true --overwrite
 ----
+--
+====
 
 NOTE: Model namespaces (`llm`, `external-models`) are labeled in their respective deployment phases.
 

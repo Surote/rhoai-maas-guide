@@ -2,7 +2,7 @@
 
 `setup-maas.sh` is a single script that handles the entire MaaS lifecycle, from operator installation through model deployment and verification. Each phase is idempotent; re-running skips what's already done.
 
-IMPORTANT: This guide is not a replacement for the link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/index[official {rhoai} {maas} documentation]. It is a companion resource with opinionated Kustomize manifests and automation scripts to accelerate deployment.
+IMPORTANT: This guide is not a replacement for the official {rhoai} {maas} documentation (link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/govern_llm_access_with_models-as-a-service/index[3.5] | link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/index[3.4]). It is a companion resource with opinionated Kustomize manifests and automation scripts to accelerate deployment.
 
 == Clone and Run
 
@@ -10,8 +10,28 @@ IMPORTANT: This guide is not a replacement for the link:https://docs.redhat.com/
 ----
 git clone https://github.com/rh-aiservices-bu/rhoai-maas-guide.git
 cd rhoai-maas-guide
+----
+
+[tabs]
+====
+RHOAI 3.5+ (default)::
++
+--
+[source,bash]
+----
 ./scripts/setup-maas.sh
 ----
+--
+
+RHOAI 3.4::
++
+--
+[source,bash]
+----
+./scripts/setup-maas.sh --rhoai-version 3.4
+----
+--
+====
 
 This runs Phases 0-6 automatically. The script detects what's already installed and skips completed phases.
 
@@ -25,8 +45,12 @@ This runs Phases 0-6 automatically. The script detects what's already installed 
 | Model to deploy: `simulator` (CPU), `granite-tiny-gpu` (small GPU), `gpt-oss-20b` (large GPU), `auto` (auto-detect by GPU VRAM)
 | `auto`
 
+| `--rhoai-version <v>`
+| RHOAI version: `3.4` or `3.5`. Auto-detects if already installed.
+| `3.5`
+
 | `--from-phase <N>`
-| Start from phase N (0-7), skipping earlier phases
+| Start from phase N (0-8), skipping earlier phases
 | `0`
 
 | `--skip-models`
@@ -39,6 +63,10 @@ This runs Phases 0-6 automatically. The script detects what's already installed 
 
 | `--with-observability`
 | Also run Phase 7 (COO + Gateway telemetry)
+|
+
+| `--with-external-models`
+| Also run Phase 8 (ExternalModel deployment via OpenAI, Gemini, or Bedrock)
 |
 
 | `--dry-run`
@@ -83,6 +111,10 @@ This runs Phases 0-6 automatically. The script detects what's already installed 
 | 7
 | Observability - COO subscription + Gateway TelemetryPolicy
 | 2-3 min
+
+| 8
+| External Models - ExternalModel CRs + MaaS governance (only with `--with-external-models`)
+| 5-10 min
 |===
 
 == Common Usage Patterns
@@ -157,7 +189,7 @@ These wrap individual phases for standalone use:
 | Send inference requests to a deployed model endpoint
 
 | `scripts/verify-maas.sh`
-| Phase 6 only - wrapper for `manifests/manifests/06-verification/verify.sh`
+| Phase 6 only - wrapper for `manifests/06-verification/verify.sh`
 |===
 
 == State Detection

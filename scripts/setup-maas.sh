@@ -61,6 +61,7 @@ WITH_EXTERNAL_MODELS=false
 MAAS_HOSTNAME="${MAAS_HOSTNAME:-}"
 EXTERNAL_MODEL_PROVIDER="${EXTERNAL_MODEL_PROVIDER:-openai}"
 EXTERNAL_MODEL_API_KEY="${EXTERNAL_MODEL_API_KEY:-}"
+RHOAI_TARGET_VERSION=""
 DISCONNECTED=${DISCONNECTED:-false}
 DRY_RUN=false
 
@@ -75,18 +76,20 @@ while [[ $# -gt 0 ]]; do
         --maas-hostname) MAAS_HOSTNAME="$2"; shift 2 ;;
         --external-model-provider) EXTERNAL_MODEL_PROVIDER="$2"; shift 2 ;;
         --external-model-api-key) EXTERNAL_MODEL_API_KEY="$2"; shift 2 ;;
+        --rhoai-version) RHOAI_TARGET_VERSION="$2"; shift 2 ;;
         --disconnected) DISCONNECTED=true; shift ;;
         --dry-run) DRY_RUN=true; shift ;;
         -h|--help)
             cat <<'EOF'
 Usage: setup-maas.sh [OPTIONS]
 
-End-to-end MaaS deployment on RHOAI 3.4. Runs all phases from operator
+End-to-end MaaS deployment on RHOAI 3.4/3.5. Runs all phases from operator
 installation through model deployment and verification. Each phase is
 idempotent  - re-running skips what's already done.
 
 Options:
   --model <name>       Model: simulator, granite-tiny-gpu, gpt-oss-20b, gemma, auto (default: auto)
+  --rhoai-version <v>  RHOAI version: 3.4 or 3.5 (default: 3.5). Auto-detects if already installed.
   --from-phase <N>     Start from phase N (0-8, default: 0)
   --maas-hostname <h>  Custom gateway hostname (default: maas.<cluster-domain>, or MAAS_HOSTNAME env var)
   --skip-models        Skip Phase 5 (model deployment)
@@ -103,8 +106,8 @@ Phases:
   0  Preflight          Detect cluster state, decide which phases to run
   1  Operators          Install required operator subscriptions (RHOAI, RHCL, etc.)
   2  Platform config    Kuadrant, UWM, GatewayClass, Gateway
-  3  RHOAI config       DSC with modelsAsService: Managed, Dashboard flags
-  4  MaaS platform      PostgreSQL secrets/deployment, Authorino TLS
+  3  MaaS platform      PostgreSQL secrets/deployment, Authorino TLS
+  4  RHOAI config       DSC with MaaS: Managed, Dashboard flags
   5  Deploy model       Auto-detect GPU, apply model Kustomize manifests
   6  Verify             6-phase E2E verification (API, auth, rate limits)
   7  Observability      Tempo + OpenTelemetry + COO + Gateway telemetry (only with --with-observability)
@@ -113,8 +116,8 @@ Phases:
 Auto-detection (--model auto):
   No GPU             -> simulator (CPU-only, ~30s startup)
   GPU VRAM >= 40 GiB -> gpt-oss-20b (L40S, A100, H100)
-  GPU VRAM >= 16 GiB -> gemma (A10G, L4)
-  GPU VRAM <  16 GiB -> granite-tiny-gpu (T4)
+  GPU VRAM >= 16 GiB -> gemma (L4, L40)
+  GPU VRAM <  16 GiB -> granite-tiny-gpu (L4)
 EOF
             exit 0
             ;;
@@ -201,6 +204,34 @@ log_info "Platform type: ${PLATFORM_TYPE} (cloud LB: ${IS_CLOUD_PLATFORM})"
 # Note: avoid grep -q in pipelines  - with pipefail, grep -q causes SIGPIPE (exit 141)
 RHOAI_CSVS=$(oc get csv -n redhat-ods-operator --no-headers 2>/dev/null || true)
 echo "$RHOAI_CSVS" | grep rhods >/dev/null 2>&1 && HAS_RHOAI_CSV=true
+
+# Detect installed RHOAI version and resolve effective version
+RHOAI_INSTALLED_VERSION=""
+if [ "$HAS_RHOAI_CSV" = true ]; then
+    RHOAI_INSTALLED_VERSION=$(echo "$RHOAI_CSVS" | grep rhods | awk '{print $1}' | grep -oE '[0-9]+\.[0-9]+' | head -1)
+fi
+if [ -n "$RHOAI_INSTALLED_VERSION" ]; then
+    RHOAI_MAJOR_MINOR="$RHOAI_INSTALLED_VERSION"
+    if [ -n "$RHOAI_TARGET_VERSION" ] && [ "$RHOAI_TARGET_VERSION" != "$RHOAI_MAJOR_MINOR" ]; then
+        log_warn "RHOAI $RHOAI_MAJOR_MINOR already installed, ignoring --rhoai-version $RHOAI_TARGET_VERSION"
+    fi
+elif [ -n "$RHOAI_TARGET_VERSION" ]; then
+    RHOAI_MAJOR_MINOR="$RHOAI_TARGET_VERSION"
+else
+    RHOAI_MAJOR_MINOR="3.5"
+fi
+
+# Derive namespace layout based on RHOAI version
+GATEWAY_INFRA_NS=redhat-ai-gateway-infra
+IS_35_PLUS=false
+if printf '%s\n' "3.5" "$RHOAI_MAJOR_MINOR" | sort -V | head -1 | grep -qx "3.5"; then
+    IS_35_PLUS=true
+fi
+if [ "$IS_35_PLUS" = true ]; then
+    MAAS_API_NS="$GATEWAY_INFRA_NS"
+else
+    MAAS_API_NS="$NAMESPACE"
+fi
 RHCL_CSVS=$(oc get csv -n openshift-operators --no-headers 2>/dev/null || true)
 echo "$RHCL_CSVS" | grep rhcl >/dev/null 2>&1 && HAS_RHCL_CSV=true
 oc get kuadrant kuadrant -n kuadrant-system &>/dev/null && HAS_KUADRANT=true
@@ -211,11 +242,18 @@ oc get gateway maas-default-gateway -n openshift-ingress &>/dev/null && HAS_GATE
 oc get datasciencecluster default-dsc &>/dev/null && HAS_DSC=true
 if [ "$HAS_DSC" = true ]; then
     MAAS_STATE=$(oc get datasciencecluster default-dsc -o jsonpath='{.spec.components.kserve.modelsAsService.managementState}' 2>/dev/null || echo "")
-    [ "$MAAS_STATE" = "Managed" ] && HAS_MAAS_MANAGED=true
+    MAAS_STATE_35=$(oc get datasciencecluster default-dsc -o jsonpath='{.spec.components.aigateway.modelsAsAService.managementState}' 2>/dev/null || echo "")
+    [ "$MAAS_STATE" = "Managed" ] || [ "$MAAS_STATE_35" = "Managed" ] && HAS_MAAS_MANAGED=true
 fi
 oc get deployment postgres -n "$NAMESPACE" &>/dev/null && HAS_POSTGRES=true
-oc get deployment maas-api -n "$NAMESPACE" &>/dev/null && HAS_MAAS_API=true
-oc get tenant -n models-as-a-service &>/dev/null && HAS_TENANT=true
+oc get deployment maas-api -n "$MAAS_API_NS" &>/dev/null && HAS_MAAS_API=true
+if [ "$HAS_MAAS_API" = false ]; then
+    oc get deployment maas-api -n "$NAMESPACE" &>/dev/null && HAS_MAAS_API=true && MAAS_API_NS="$NAMESPACE"
+fi
+# 3.5+ uses Config CR, 3.4 uses Tenant CR
+TENANT_COUNT=$(oc get tenant -n models-as-a-service --no-headers 2>/dev/null | wc -l | tr -d ' ' || echo "0")
+CONFIG_COUNT=$(oc get configs.maas.opendatahub.io --no-headers 2>/dev/null | wc -l | tr -d ' ' || echo "0")
+{ [ "$TENANT_COUNT" -gt 0 ] || [ "$CONFIG_COUNT" -gt 0 ]; } 2>/dev/null && HAS_TENANT=true
 MODEL_COUNT=$(oc get llminferenceservice -n llm --no-headers 2>/dev/null | wc -l | tr -d ' ' || echo "0")
 [ "$MODEL_COUNT" -gt 0 ] 2>/dev/null && HAS_MODELS=true
 METALLB_CSVS=$(oc get csv -n metallb-system --no-headers 2>/dev/null || true)
@@ -223,6 +261,8 @@ echo "$METALLB_CSVS" | grep "metallb-operator" >/dev/null 2>&1 && HAS_METALLB=tr
 
 echo ""
 log_info "Detected state:"
+log_info "  RHOAI version:      ${RHOAI_MAJOR_MINOR} (3.5+: ${IS_35_PLUS})"
+log_info "  maas-api namespace: ${MAAS_API_NS}"
 log_info "  RHOAI operator:     $([ "$HAS_RHOAI_CSV" = true ] && echo "installed" || echo "not found")"
 log_info "  RHCL operator:      $([ "$HAS_RHCL_CSV" = true ] && echo "installed" || echo "not found")"
 log_info "  Kuadrant CR:        $([ "$HAS_KUADRANT" = true ] && echo "ready" || echo "not found")"
@@ -268,6 +308,14 @@ if should_run 1; then
     if [ "$HAS_RHOAI_CSV" = true ] && [ "$HAS_RHCL_CSV" = true ]; then
         log_info "Required operators already installed, skipping"
     else
+        RESTORE_SUB=false
+        if [ "$IS_35_PLUS" = false ] && [ "$HAS_RHOAI_CSV" != true ]; then
+            sed -i.bak 's/channel: stable-3.x/channel: stable-3.4/' \
+                "$MANIFESTS_DIR/01-prerequisites/operators/rhoai-operator/subscription.yaml"
+            log_info "Patched RHOAI subscription to channel: stable-3.4"
+            RESTORE_SUB=true
+        fi
+
         log_info "Applying operator subscriptions..."
         run_cmd oc apply -k "$MANIFESTS_DIR/01-prerequisites/operators/"
         log_info "Operator subscriptions applied"
@@ -352,6 +400,11 @@ for item in data.get('items',[]):
                 log_warn "  Could not find RELATED_IMAGE_WASMSHIM in RHCL CSV - WASM shim may fail on disconnected"
             fi
         fi
+        if [ "${RESTORE_SUB:-false}" = true ]; then
+            mv "$MANIFESTS_DIR/01-prerequisites/operators/rhoai-operator/subscription.yaml.bak" \
+               "$MANIFESTS_DIR/01-prerequisites/operators/rhoai-operator/subscription.yaml"
+            log_info "Restored RHOAI subscription to channel: stable-3.x"
+        fi
     fi
 fi
 
@@ -373,20 +426,19 @@ if should_run 2; then
         run_cmd oc apply -f "$MANIFESTS_DIR/02-platform-config/kuadrant/kuadrant.yaml"
 
         if [ "$DRY_RUN" = false ]; then
-            if ! oc wait --for=condition=Ready kuadrant/kuadrant -n kuadrant-system --timeout=60s 2>/dev/null; then
+            if oc wait --for=condition=Ready kuadrant/kuadrant -n kuadrant-system --timeout=60s 2>/dev/null; then
+                log_info "Kuadrant: Ready"
+            else
                 KUADRANT_REASON=$(oc get kuadrant kuadrant -n kuadrant-system \
                     -o jsonpath='{.status.conditions[?(@.type=="Ready")].reason}' 2>/dev/null || echo "")
                 if [ "$KUADRANT_REASON" = "MissingDependency" ]; then
-                    log_warn "Kuadrant reports MissingDependency (Istio race)  - restarting operator pod..."
-                    oc delete pod -n openshift-operators \
-                        $(oc get pods -n openshift-operators --no-headers 2>/dev/null | grep kuadrant-operator | awk '{print $1}' | head -1) 2>/dev/null || \
-                        oc delete pod -n openshift-operators -l control-plane=controller-manager,app=kuadrant 2>/dev/null || true
-                    log_info "Operator pod restarted, waiting for Kuadrant Ready..."
+                    log_warn "Kuadrant reports MissingDependency - expected on fresh install (Istio not yet installed via GatewayClass)"
+                    log_info "Kuadrant will be reconciled after GatewayClass creates the Istio provider (Step 7)"
+                else
+                    log_error "Kuadrant did not become Ready (reason: $KUADRANT_REASON) - check: oc get kuadrant kuadrant -n kuadrant-system -o yaml"
+                    exit 1
                 fi
-                oc wait --for=condition=Ready kuadrant/kuadrant -n kuadrant-system --timeout=180s 2>/dev/null || \
-                    { log_error "Kuadrant did not become Ready  - check: oc get kuadrant kuadrant -n kuadrant-system -o yaml"; exit 1; }
             fi
-            log_info "Kuadrant: Ready"
         else
             log_info "[DRY RUN] Would wait for Kuadrant Ready"
         fi
@@ -593,8 +645,35 @@ if should_run 2; then
         fi
     fi
 
-    # Label redhat-ods-applications for Gateway route binding (best practice: least privilege)
-    oc label namespace redhat-ods-applications maas.opendatahub.io/gateway-access=true --overwrite 2>/dev/null || true
+    # Step 7: Ensure Kuadrant sees the Gateway API provider (Istio race fix)
+    # On fresh installs, Kuadrant CR was created before GatewayClass (which provisions Istio).
+    # On pre-existing clusters, Kuadrant may have been installed before Istio too.
+    # Either way, restart the operator if it still reports MissingDependency now that Gateway is up.
+    if [ "$DRY_RUN" = false ]; then
+        KUADRANT_READY=$(oc get kuadrant kuadrant -n kuadrant-system \
+            -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
+        if [ "$KUADRANT_READY" != "True" ]; then
+            KUADRANT_REASON=$(oc get kuadrant kuadrant -n kuadrant-system \
+                -o jsonpath='{.status.conditions[?(@.type=="Ready")].reason}' 2>/dev/null || echo "")
+            if [ "$KUADRANT_REASON" = "MissingDependency" ]; then
+                log_warn "Kuadrant reports MissingDependency after Gateway setup - restarting operator pod..."
+                KUADRANT_POD=$(oc get pods -n openshift-operators --no-headers 2>/dev/null \
+                    | grep kuadrant-operator-controller | awk '{print $1}' | head -1)
+                if [ -n "$KUADRANT_POD" ]; then
+                    oc delete pod "$KUADRANT_POD" -n openshift-operators 2>/dev/null || true
+                    sleep 10
+                    oc wait kuadrant/kuadrant -n kuadrant-system --for=condition=Ready --timeout=120s 2>/dev/null || \
+                        { log_error "Kuadrant did not become Ready after Gateway setup and operator restart"; exit 1; }
+                    log_info "Kuadrant: Ready (after operator restart)"
+                fi
+            else
+                log_warn "Kuadrant not Ready (reason: $KUADRANT_REASON) - may need manual investigation"
+            fi
+        fi
+    fi
+
+    # Label namespace for Gateway route binding (best practice: least privilege)
+    oc label namespace "$MAAS_API_NS" maas.opendatahub.io/gateway-access=true --overwrite 2>/dev/null || true
 fi
 
 # =============================================================================
@@ -618,6 +697,14 @@ if should_run 3; then
             -n "$NAMESPACE" \
             --from-literal=DB_CONNECTION_URL="postgresql://maas:${POSTGRES_PASSWORD}@postgres.${NAMESPACE}.svc:5432/maas?sslmode=disable"
         log_info "PostgreSQL secrets created"
+
+        if [ "$IS_35_PLUS" = true ]; then
+            oc create namespace "$GATEWAY_INFRA_NS" --dry-run=client -o yaml | oc apply -f - >/dev/null 2>&1 || true
+            run_cmd oc create secret generic maas-db-config \
+                -n "$GATEWAY_INFRA_NS" \
+                --from-literal=DB_CONNECTION_URL="postgresql://maas:${POSTGRES_PASSWORD}@postgres.${NAMESPACE}.svc:5432/maas?sslmode=disable"
+            log_info "Mirrored maas-db-config to ${GATEWAY_INFRA_NS} (RHOAI 3.5+ maas-api location)"
+        fi
     fi
 
     # Step 2: PostgreSQL deployment
@@ -668,17 +755,23 @@ if should_run 3; then
 fi
 
 # =============================================================================
-# Phase 4: RHOAI Configuration (DSC enables modelsAsService after DB exists)
+# Phase 4: RHOAI Configuration (DSC enables MaaS after DB exists)
 # =============================================================================
 if should_run 4; then
     log_phase 4 "RHOAI Configuration"
 
     if [ "$HAS_MAAS_MANAGED" = true ]; then
-        log_info "DSC already has modelsAsService: Managed, skipping"
+        log_info "DSC already has MaaS: Managed, skipping"
     else
         log_step "Applying DSC and DSCI..."
         run_cmd oc apply -f "$MANIFESTS_DIR/04-rhoai-config/dscinitialization.yaml"
-        run_cmd oc apply -f "$MANIFESTS_DIR/04-rhoai-config/datasciencecluster.yaml"
+        if [ "$IS_35_PLUS" = true ]; then
+            log_info "Using RHOAI 3.5+ DSC (aigateway.modelsAsAService)"
+            run_cmd oc apply -f "$MANIFESTS_DIR/04-rhoai-config/datasciencecluster.yaml"
+        else
+            log_info "Using RHOAI 3.4 DSC (kserve.modelsAsService)"
+            run_cmd oc apply -f "$MANIFESTS_DIR/04-rhoai-config/datasciencecluster-34.yaml"
+        fi
         run_cmd oc apply -f "$MANIFESTS_DIR/04-rhoai-config/hardwareprofile.yaml"
         log_info "DSC/DSCI/HardwareProfile applied"
 
@@ -715,17 +808,25 @@ if should_run 4; then
         log_info "Dashboard config applied"
     fi
 
-    # Wait for maas-api (should start healthy since PostgreSQL was deployed in Phase 3)
+    # Wait for maas-api (probes both namespaces - 3.5+ uses redhat-ai-gateway-infra)
     log_step "Waiting for maas-api deployment"
     if [ "$HAS_MAAS_API" = true ]; then
-        log_info "maas-api already running"
+        log_info "maas-api already running in ${MAAS_API_NS}"
     elif [ "$DRY_RUN" = false ]; then
         TIMEOUT=300
         ELAPSED=0
+        MAAS_API_FOUND=false
         while [ $ELAPSED -lt $TIMEOUT ]; do
-            if oc get deployment maas-api -n "$NAMESPACE" &>/dev/null; then
-                log_info "maas-api deployment found"
-                oc rollout status deployment/maas-api -n "$NAMESPACE" --timeout=180s 2>/dev/null || \
+            for _ns in "$GATEWAY_INFRA_NS" "$NAMESPACE"; do
+                if oc get deployment maas-api -n "$_ns" &>/dev/null; then
+                    MAAS_API_NS="$_ns"
+                    MAAS_API_FOUND=true
+                    break
+                fi
+            done
+            if [ "$MAAS_API_FOUND" = true ]; then
+                log_info "maas-api deployment found in ${MAAS_API_NS}"
+                oc rollout status deployment/maas-api -n "$MAAS_API_NS" --timeout=180s 2>/dev/null || \
                     log_warn "maas-api rollout did not complete within 180s"
                 break
             fi
@@ -738,14 +839,22 @@ if should_run 4; then
         [ $ELAPSED -ge $TIMEOUT ] && log_warn "maas-api not found after ${TIMEOUT}s  - operator may still be reconciling"
     fi
 
-    # Verify Tenant CR
+    # Verify MaaS readiness (3.5+ uses Config CR, 3.4 uses Tenant CR)
     if [ "$DRY_RUN" = false ]; then
-        TENANT_READY=$(oc get tenant default-tenant -n models-as-a-service \
-            -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
-        if [ "$TENANT_READY" = "True" ]; then
-            log_info "Tenant CR: Ready"
+        if [ "$IS_35_PLUS" = true ]; then
+            if oc get configs.maas.opendatahub.io default &>/dev/null; then
+                log_info "MaaS Config CR: exists"
+            else
+                log_warn "MaaS Config CR not found yet"
+            fi
         else
-            log_warn "Tenant CR not Ready yet (status: ${TENANT_READY:-not found})"
+            TENANT_READY=$(oc get tenant default-tenant -n models-as-a-service \
+                -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
+            if [ "$TENANT_READY" = "True" ]; then
+                log_info "Tenant CR: Ready"
+            else
+                log_warn "Tenant CR not Ready yet (status: ${TENANT_READY:-not found})"
+            fi
         fi
     fi
 
@@ -1188,7 +1297,7 @@ else
     RHOAI_VERSION=$(oc get csv -n redhat-ods-operator -l operators.coreos.com/rhods-operator.redhat-ods-operator= -o jsonpath='{.items[0].spec.version}' 2>/dev/null || echo "unknown")
     GW_STATUS=$(oc get gateway maas-default-gateway -n openshift-ingress \
         -o jsonpath='{.status.conditions[?(@.type=="Programmed")].status}' 2>/dev/null || echo "Unknown")
-    API_READY=$(oc get deployment maas-api -n "$NAMESPACE" \
+    API_READY=$(oc get deployment maas-api -n "$MAAS_API_NS" \
         -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
     HEALTH=$(curl -sk --connect-timeout 10 --max-time 15 -o /dev/null -w '%{http_code}' "${MAAS_URL}/maas-api/health" 2>/dev/null) || true
     [ -z "$HEALTH" ] && HEALTH="000"

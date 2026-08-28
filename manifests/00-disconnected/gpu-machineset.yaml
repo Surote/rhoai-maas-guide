@@ -7,16 +7,16 @@
 #   export SUBNET=$(oc get machineset -n openshift-machine-api -o jsonpath='{.items[0].spec.template.spec.providerSpec.value.subnet.id}')
 #   export REGION=$(oc get machineset -n openshift-machine-api -o jsonpath='{.items[0].spec.template.spec.providerSpec.value.placement.region}')
 #   export AZ=$(oc get machineset -n openshift-machine-api -o jsonpath='{.items[0].spec.template.spec.providerSpec.value.placement.availabilityZone}')
-#   export INSTANCE_TYPE=g5.2xlarge   # or g5.12xlarge for 4xA10G (96GB VRAM)
+#   export INSTANCE_TYPE=g6.2xlarge   # or g6e.2xlarge for L40S (48GB VRAM)
 #   export MS_NAME=${INFRA_ID}-gpu-${AZ}
 #   export IAM_PROFILE=${INFRA_ID}-worker-profile
 #   export SG=${INFRA_ID}-node
 #
 #   envsubst < manifests/00-disconnected/gpu-machineset.yaml | oc apply -f -
 #
-# Instance types:
-#   g5.2xlarge   1x A10G  (24 GB VRAM) - fits Gemma 9B FP8, Granite tiny
-#   g5.12xlarge  4x A10G  (96 GB VRAM) - fits GPT-oss-20b and larger models
+# Instance types (vLLM FP8 requires compute capability >= 80, do NOT use g5/A10G):
+#   g6.2xlarge   1x L4    (24 GB VRAM) - fits Gemma 9B FP8, Granite tiny
+#   g6e.2xlarge  1x L40S  (48 GB VRAM) - fits GPT-oss-20b
 apiVersion: machine.openshift.io/v1beta1
 kind: MachineSet
 metadata:

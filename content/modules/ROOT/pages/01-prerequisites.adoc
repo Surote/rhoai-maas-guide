@@ -1,10 +1,10 @@
 = Phase 1: Prerequisites
 
-Install the operator subscriptions required by {rhoai} 3.4 {maas}.
+Install the operator subscriptions required by {rhoai} 3.4 / 3.5 {maas}.
 
 TIP: All file paths and `oc apply` commands in this guide are relative to the link:{repo-url}[rhoai-maas-guide] repository root. Make sure you have cloned it and are working from its root directory (see xref:index.adoc#_getting_started[Getting Started]).
 
-IMPORTANT: This guide is not a replacement for the link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/index[official {rhoai} {maas} documentation]. It is a companion resource with opinionated Kustomize manifests and automation scripts to accelerate deployment.
+IMPORTANT: This guide is not a replacement for the official {rhoai} {maas} documentation (link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/govern_llm_access_with_models-as-a-service/index[3.5] | link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/index[3.4]). It is a companion resource with opinionated Kustomize manifests and automation scripts to accelerate deployment.
 
 == Operator Overview
 
@@ -279,7 +279,7 @@ openshift-operators      authorino-operator-stable-redhat-operators-openshift-ma
 openshift-operators      dns-operator-stable-redhat-operators-openshift-marketplace                             dns-operator.v1.3.1                                AtLatestKnown
 openshift-operators      limitador-operator-stable-redhat-operators-openshift-marketplace                       limitador-operator.v1.3.1                          AtLatestKnown
 openshift-operators      rhcl-operator                                                                          rhcl-operator.v1.4.2                               AtLatestKnown
-redhat-ods-operator      rhods-operator                                                                         rhods-operator.3.4.0                               AtLatestKnown
+redhat-ods-operator      rhods-operator                                                                         rhods-operator.3.5.0                               AtLatestKnown
 ----
 
 == Appendix
@@ -313,8 +313,10 @@ manifests/01-prerequisites/
 
 == References
 
+* link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/govern_llm_access_with_models-as-a-service/index[RHOAI 3.5 MaaS Official Docs]
 * link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/index[RHOAI 3.4 MaaS Official Docs]
 * link:https://opendatahub-io.github.io/models-as-a-service/latest/[Upstream MaaS Documentation]
+* link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/installing_and_uninstalling_openshift_ai_self-managed/index[RHOAI 3.5 Installation Guide]
 * link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/installing_and_uninstalling_openshift_ai_self-managed/index[RHOAI 3.4 Installation Guide]
 
 == Next step

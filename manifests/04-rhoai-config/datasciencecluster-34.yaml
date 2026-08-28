@@ -15,14 +15,11 @@ spec:
     # -- Feast Operator (feature store) --
     feastoperator:
       managementState: Managed
-    # -- AI Gateway (MaaS modularization, RHOAI 3.5+) --
-    aigateway:
-      managementState: Managed
-      modelsAsAService:
-        managementState: Managed
-    # -- KServe (model serving) --
+    # -- KServe (model serving) + MaaS --
     kserve:
       managementState: Managed
+      modelsAsService:
+        managementState: Managed
       nim:
         managementState: Managed
       rawDeploymentServiceConfig: Headed

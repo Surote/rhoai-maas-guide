@@ -300,6 +300,11 @@ if should_run 5; then
     delete_if_exists secret postgres-creds "$NAMESPACE"
     delete_if_exists secret maas-db-config "$NAMESPACE"
 
+    # Clean up 3.5+ mirrored secret and namespace
+    if oc get secret maas-db-config -n redhat-ai-gateway-infra &>/dev/null 2>&1; then
+        delete_if_exists secret maas-db-config redhat-ai-gateway-infra
+    fi
+
     log_info "MaaS platform cleanup complete"
 fi
 
@@ -340,11 +345,12 @@ if should_run 6; then
         fi
     fi
 
-    # Remove gateway-access label from redhat-ods-applications
+    # Remove gateway-access labels from both possible namespaces
     if [ "$DRY_RUN" = false ]; then
         oc label namespace "$NAMESPACE" maas.opendatahub.io/gateway-access- 2>/dev/null || true
+        oc label namespace redhat-ai-gateway-infra maas.opendatahub.io/gateway-access- 2>/dev/null || true
     else
-        log_info "[DRY RUN] Would remove gateway-access label from $NAMESPACE"
+        log_info "[DRY RUN] Would remove gateway-access label from $NAMESPACE and redhat-ai-gateway-infra"
     fi
 
     # MetalLB (if installed by setup-maas.sh)
@@ -423,6 +429,7 @@ if should_run 7 && [ "$KEEP_OPERATORS" = false ]; then
     # Clean up RHOAI-managed namespaces
     delete_namespace "redhat-ods-applications"
     delete_namespace "redhat-ods-monitoring"
+    delete_namespace "redhat-ai-gateway-infra"
     delete_namespace "rhods-notebooks"
     delete_namespace "rhoai-model-registries"
     # models-as-a-service may have Tenant CRs with finalizers stuck if operator is gone

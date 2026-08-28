@@ -129,6 +129,9 @@ oc delete deployment postgres -n redhat-ods-applications --ignore-not-found
 oc delete service postgres -n redhat-ods-applications --ignore-not-found
 oc delete pvc postgres-data -n redhat-ods-applications --ignore-not-found
 oc delete secret postgres-creds maas-db-config -n redhat-ods-applications --ignore-not-found
+
+# RHOAI 3.5+ mirrored the secret to redhat-ai-gateway-infra
+oc delete secret maas-db-config -n redhat-ai-gateway-infra --ignore-not-found
 ----
 
 === Remove Gateway and Kuadrant
@@ -178,6 +181,7 @@ Wait 60 seconds for the RHOAI operator to clean up managed resources, then remov
 ----
 oc delete namespace redhat-ods-applications --ignore-not-found
 oc delete namespace redhat-ods-monitoring --ignore-not-found
+oc delete namespace redhat-ai-gateway-infra --ignore-not-found  # RHOAI 3.5+
 oc delete namespace rhods-notebooks --ignore-not-found
 oc delete namespace rhoai-model-registries --ignore-not-found
 oc delete namespace models-as-a-service --ignore-not-found

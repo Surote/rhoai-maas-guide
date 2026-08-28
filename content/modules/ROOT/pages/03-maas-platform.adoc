@@ -4,7 +4,7 @@ Deploy the PostgreSQL database required by the MaaS API for key lifecycle manage
 
 TIP: All file paths and `oc apply` commands in this guide are relative to the link:{repo-url}[rhoai-maas-guide] repository root. Make sure you have cloned it and are working from its root directory (see xref:index.adoc#_getting_started[Getting Started]).
 
-IMPORTANT: This guide is not a replacement for the link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/index[official {rhoai} {maas} documentation]. It is a companion resource with opinionated Kustomize manifests and automation scripts to accelerate deployment.
+IMPORTANT: This guide is not a replacement for the official {rhoai} {maas} documentation (link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/govern_llm_access_with_models-as-a-service/index[3.5] | link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/index[3.4]). It is a companion resource with opinionated Kustomize manifests and automation scripts to accelerate deployment.
 
 == Prerequisites
 
@@ -44,6 +44,8 @@ oc create secret generic maas-db-config \
   -n redhat-ods-applications \
   --from-literal=DB_CONNECTION_URL="postgresql://maas:${POSTGRES_PASSWORD}@postgres:5432/maas?sslmode=disable"
 ----
+
+NOTE: On RHOAI 3.5+, the `maas-api` deployment runs in `redhat-ai-gateway-infra`. The `maas-db-config` secret must also exist in that namespace. The `setup-maas.sh` script handles this mirroring automatically. If installing manually, create the same secret in `redhat-ai-gateway-infra` after the one above.
 
 === Step 2: Deploy PostgreSQL
 
@@ -165,6 +167,7 @@ manifests/03-maas-platform/
 == References
 
 * link:https://github.com/opendatahub-io/models-as-a-service/blob/main/docs/content/install/maas-setup.md[MaaS Setup (upstream)]
+* link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/govern_llm_access_with_models-as-a-service/index[RHOAI 3.5 MaaS Official Docs]
 * link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/index[RHOAI 3.4 MaaS Official Docs]
 
 == Next step
