@@ -426,20 +426,19 @@ if should_run 2; then
         run_cmd oc apply -f "$MANIFESTS_DIR/02-platform-config/kuadrant/kuadrant.yaml"
 
         if [ "$DRY_RUN" = false ]; then
-            if ! oc wait --for=condition=Ready kuadrant/kuadrant -n kuadrant-system --timeout=60s 2>/dev/null; then
+            if oc wait --for=condition=Ready kuadrant/kuadrant -n kuadrant-system --timeout=60s 2>/dev/null; then
+                log_info "Kuadrant: Ready"
+            else
                 KUADRANT_REASON=$(oc get kuadrant kuadrant -n kuadrant-system \
                     -o jsonpath='{.status.conditions[?(@.type=="Ready")].reason}' 2>/dev/null || echo "")
                 if [ "$KUADRANT_REASON" = "MissingDependency" ]; then
-                    log_warn "Kuadrant reports MissingDependency (Istio race)  - restarting operator pod..."
-                    oc delete pod -n openshift-operators \
-                        $(oc get pods -n openshift-operators --no-headers 2>/dev/null | grep kuadrant-operator | awk '{print $1}' | head -1) 2>/dev/null || \
-                        oc delete pod -n openshift-operators -l control-plane=controller-manager,app=kuadrant 2>/dev/null || true
-                    log_info "Operator pod restarted, waiting for Kuadrant Ready..."
+                    log_warn "Kuadrant reports MissingDependency - expected on fresh install (Istio not yet installed via GatewayClass)"
+                    log_info "Kuadrant will be reconciled after GatewayClass creates the Istio provider (Step 7)"
+                else
+                    log_error "Kuadrant did not become Ready (reason: $KUADRANT_REASON) - check: oc get kuadrant kuadrant -n kuadrant-system -o yaml"
+                    exit 1
                 fi
-                oc wait --for=condition=Ready kuadrant/kuadrant -n kuadrant-system --timeout=180s 2>/dev/null || \
-                    { log_error "Kuadrant did not become Ready  - check: oc get kuadrant kuadrant -n kuadrant-system -o yaml"; exit 1; }
             fi
-            log_info "Kuadrant: Ready"
         else
             log_info "[DRY RUN] Would wait for Kuadrant Ready"
         fi
@@ -647,8 +646,9 @@ if should_run 2; then
     fi
 
     # Step 7: Ensure Kuadrant sees the Gateway API provider (Istio race fix)
-    # If Kuadrant was pre-existing but Istio was just installed via GatewayClass,
-    # the operator may not have discovered it. Restart if MissingDependency.
+    # On fresh installs, Kuadrant CR was created before GatewayClass (which provisions Istio).
+    # On pre-existing clusters, Kuadrant may have been installed before Istio too.
+    # Either way, restart the operator if it still reports MissingDependency now that Gateway is up.
     if [ "$DRY_RUN" = false ]; then
         KUADRANT_READY=$(oc get kuadrant kuadrant -n kuadrant-system \
             -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
@@ -663,8 +663,11 @@ if should_run 2; then
                     oc delete pod "$KUADRANT_POD" -n openshift-operators 2>/dev/null || true
                     sleep 10
                     oc wait kuadrant/kuadrant -n kuadrant-system --for=condition=Ready --timeout=120s 2>/dev/null || \
-                        log_warn "Kuadrant still not Ready after operator restart"
+                        { log_error "Kuadrant did not become Ready after Gateway setup and operator restart"; exit 1; }
+                    log_info "Kuadrant: Ready (after operator restart)"
                 fi
+            else
+                log_warn "Kuadrant not Ready (reason: $KUADRANT_REASON) - may need manual investigation"
             fi
         fi
     fi
