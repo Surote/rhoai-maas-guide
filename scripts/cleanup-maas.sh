@@ -429,6 +429,7 @@ if should_run 7 && [ "$KEEP_OPERATORS" = false ]; then
     # Clean up RHOAI-managed namespaces
     delete_namespace "redhat-ods-applications"
     delete_namespace "redhat-ods-monitoring"
+    delete_namespace "redhat-ai-gateway-infra"
     delete_namespace "rhods-notebooks"
     delete_namespace "rhoai-model-registries"
     # models-as-a-service may have Tenant CRs with finalizers stuck if operator is gone

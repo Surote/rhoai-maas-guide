@@ -167,6 +167,7 @@ manifests/03-maas-platform/
 == References
 
 * link:https://github.com/opendatahub-io/models-as-a-service/blob/main/docs/content/install/maas-setup.md[MaaS Setup (upstream)]
+* link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/govern_llm_access_with_models-as-a-service/index[RHOAI 3.5 MaaS Official Docs]
 * link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/index[RHOAI 3.4 MaaS Official Docs]
 
 == Next step

@@ -5,13 +5,14 @@
 # Supports auto-detection of GPU capabilities to select the appropriate model:
 #   - No GPU             -> simulator (CPU-only mock)
 #   - GPU VRAM >= 40 GiB -> gpt-oss-20b
-#   - GPU VRAM <  40 GiB -> granite-tiny-gpu
+#   - GPU VRAM >= 16 GiB -> gemma
+#   - GPU VRAM <  16 GiB -> granite-tiny-gpu
 #
 # Usage:
 #   ./scripts/deploy-model.sh [OPTIONS]
 #
 # Options:
-#   --model <name>  Model to deploy: simulator, granite-tiny-gpu, gpt-oss-20b, auto (default: auto)
+#   --model <name>  Model to deploy: simulator, granite-tiny-gpu, gemma, gpt-oss-20b, auto (default: auto)
 #   --dry-run       Preview without applying
 #   -h, --help      Show this help message
 #

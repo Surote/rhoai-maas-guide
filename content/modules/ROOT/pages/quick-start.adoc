@@ -50,7 +50,7 @@ This runs Phases 0-6 automatically. The script detects what's already installed 
 | `3.5`
 
 | `--from-phase <N>`
-| Start from phase N (0-7), skipping earlier phases
+| Start from phase N (0-8), skipping earlier phases
 | `0`
 
 | `--skip-models`
@@ -63,6 +63,10 @@ This runs Phases 0-6 automatically. The script detects what's already installed 
 
 | `--with-observability`
 | Also run Phase 7 (COO + Gateway telemetry)
+|
+
+| `--with-external-models`
+| Also run Phase 8 (ExternalModel deployment via OpenAI, Gemini, or Bedrock)
 |
 
 | `--dry-run`
@@ -107,6 +111,10 @@ This runs Phases 0-6 automatically. The script detects what's already installed 
 | 7
 | Observability - COO subscription + Gateway TelemetryPolicy
 | 2-3 min
+
+| 8
+| External Models - ExternalModel CRs + MaaS governance (only with `--with-external-models`)
+| 5-10 min
 |===
 
 == Common Usage Patterns
@@ -181,7 +189,7 @@ These wrap individual phases for standalone use:
 | Send inference requests to a deployed model endpoint
 
 | `scripts/verify-maas.sh`
-| Phase 6 only - wrapper for `manifests/manifests/06-verification/verify.sh`
+| Phase 6 only - wrapper for `manifests/06-verification/verify.sh`
 |===
 
 == State Detection

@@ -106,8 +106,8 @@ Phases:
   0  Preflight          Detect cluster state, decide which phases to run
   1  Operators          Install required operator subscriptions (RHOAI, RHCL, etc.)
   2  Platform config    Kuadrant, UWM, GatewayClass, Gateway
-  3  RHOAI config       DSC with MaaS: Managed, Dashboard flags
-  4  MaaS platform      PostgreSQL secrets/deployment, Authorino TLS
+  3  MaaS platform      PostgreSQL secrets/deployment, Authorino TLS
+  4  RHOAI config       DSC with MaaS: Managed, Dashboard flags
   5  Deploy model       Auto-detect GPU, apply model Kustomize manifests
   6  Verify             6-phase E2E verification (API, auth, rate limits)
   7  Observability      Tempo + OpenTelemetry + COO + Gateway telemetry (only with --with-observability)
@@ -116,8 +116,8 @@ Phases:
 Auto-detection (--model auto):
   No GPU             -> simulator (CPU-only, ~30s startup)
   GPU VRAM >= 40 GiB -> gpt-oss-20b (L40S, A100, H100)
-  GPU VRAM >= 16 GiB -> gemma (A10G, L4)
-  GPU VRAM <  16 GiB -> granite-tiny-gpu (T4)
+  GPU VRAM >= 16 GiB -> gemma (L4, L40)
+  GPU VRAM <  16 GiB -> granite-tiny-gpu (L4)
 EOF
             exit 0
             ;;

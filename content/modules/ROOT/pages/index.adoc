@@ -117,8 +117,13 @@ For end-to-end deployment using a single script, see the xref:quick-start.adoc[A
 
 | `granite-tiny-gpu`
 | Yes
-| < 40 GiB
+| ~8 GiB
 | Small GPU (L4, L40)
+
+| `gemma`
+| Yes
+| ~12 GiB
+| Mid GPU (L4, L40, L40S)
 
 | `gpt-oss-20b`
 | Yes

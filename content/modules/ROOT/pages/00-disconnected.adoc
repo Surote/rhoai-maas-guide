@@ -11,7 +11,7 @@ A disconnected {ocp-short} cluster pulls all container images from a private mir
 This guide assumes:
 
 * {ocp-short} 4.20+ is already installed in disconnected mode
-* {rhoai} 3.4 operators are installed (rhods-operator, cert-manager, NFD, GPU operator)
+* {rhoai} 3.4 / 3.5 operators are installed (rhods-operator, cert-manager, NFD, GPU operator)
 * A mirror registry is running and the cluster trusts its CA
 * ImageDigestMirrorSet (IDMS) and CatalogSources from the RHOAI mirror are already applied
 
@@ -337,7 +337,7 @@ export AMI=$(oc get machineset -n openshift-machine-api -o jsonpath='{.items[0].
 export SUBNET=$(oc get machineset -n openshift-machine-api -o jsonpath='{.items[0].spec.template.spec.providerSpec.value.subnet.id}')
 export REGION=$(oc get machineset -n openshift-machine-api -o jsonpath='{.items[0].spec.template.spec.providerSpec.value.placement.region}')
 export AZ=$(oc get machineset -n openshift-machine-api -o jsonpath='{.items[0].spec.template.spec.providerSpec.value.placement.availabilityZone}')
-export INSTANCE_TYPE=g5.2xlarge
+export INSTANCE_TYPE=g6.2xlarge
 export MS_NAME=${INFRA_ID}-gpu-${AZ}
 export IAM_PROFILE=${INFRA_ID}-worker-profile
 export SG=${INFRA_ID}-node
@@ -354,7 +354,9 @@ oc get machines -n openshift-machine-api -w
 oc get nodes -l nvidia.com/gpu.present=true
 ----
 
-The default instance type is `g5.2xlarge` (1x A10G, 24 GB VRAM) - enough for Gemma 2 9B FP8. Edit the template to use `g5.12xlarge` (4x A10G, 96 GB VRAM) for larger models.
+The default instance type is `g6.2xlarge` (1x L4, 24 GB VRAM) - enough for Gemma 2 9B FP8. Edit the template to use `g6e.2xlarge` (1x L40S, 48 GB VRAM) for larger models like gpt-oss-20b.
+
+IMPORTANT: Do not use `g5` instances (A10G GPUs) - vLLM FP8 requires compute capability >= 80 (Ampere or newer). A10G GPUs are not supported. Use `g6` (L4) or `g6e` (L40S) instances instead.
 
 === GPU driver compilation on disconnected
 
