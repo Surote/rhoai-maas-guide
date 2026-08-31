@@ -212,33 +212,75 @@ Wait a few seconds for the HTTPRoute to be accepted, then reload the dashboard.
 [[issue-4]]
 == Issue 4: Gateway Hostname Discovery (ClusterIP + Route Topology)
 
-*Jira:* No dedicated Jira for this issue.
+*Jira:* link:https://redhat.atlassian.net/browse/RHOAIENG-89775[RHOAIENG-89775^]
 
-When the {maas} gateway is deployed without a cloud load balancer (common on on-premise, bare-metal, or any cluster using ClusterIP + Route topology), the Gateway's `status.addresses` field reports the internal `.svc.cluster.local` address instead of the external hostname. The maas-api reads this field to construct the external {maas} URL, and fails with:
+When the {maas} gateway is deployed without a cloud load balancer (common on on-premise, bare-metal, or any cluster using ClusterIP + Route topology), the maas-api `/v1/tenants` endpoint returns HTTP 500 with `"Failed to resolve gateway"`. This happens because:
 
-----
-"error":"gateway ... is not configured with an external hostname"
-----
+1. `extractGatewayMetadata()` in maas-api first tries `spec.listeners[].hostname` on the Gateway - but only for listeners with `attachedRoutes > 0`. If the hostname is not set in the spec, or routes are not yet attached after upgrade, this returns empty.
+2. It then falls back to `status.addresses` - which is either empty (no LoadBalancer) or contains the internal `.svc.cluster.local` address.
+3. There is no fallback to discover the OpenShift Route hostname.
 
-This causes "Error loading API keys" in the dashboard even when all other components are healthy.
+This breaks the {maas} dashboard because maas-ui calls `/v1/tenants` at startup to auto-detect the gateway hostname (new in 3.5). In 3.4 the hostname was hardcoded, so this code path was never exercised.
+
+=== Symptoms
+
+* Dashboard shows "Error loading API keys" or "Error loading components"
+* maas-api logs show: `Failed to extract gateway metadata - could not determine external hostname from gateway`
+* Gateway condition shows `Programmed: False` with reason `AddressNotAssigned`
 
 === Diagnosis
 
 [source,bash]
 ----
+# Check if spec.listeners have an explicit hostname
+oc get gateway maas-default-gateway -n openshift-ingress \
+  -o jsonpath='{.spec.listeners[*].hostname}'
+
 # Check what address the gateway reports
 oc get gateway maas-default-gateway -n openshift-ingress \
   -o jsonpath='{.status.addresses[*]}'
 
-# Check maas-api logs
-oc logs deploy/maas-api -n redhat-ai-gateway-infra | grep -i "hostname\|external\|gateway"
+# Check attachedRoutes count (must be > 0 for hostname discovery to work)
+oc get gateway maas-default-gateway -n openshift-ingress \
+  -o jsonpath='{range .status.listeners[*]}{.name}: attachedRoutes={.attachedRoutes}{"\n"}{end}'
+
+# Check maas-api logs for the error
+oc logs deploy/maas-api -n redhat-ai-gateway-infra | grep -i "hostname\|external\|gateway metadata"
 ----
 
-If `status.addresses` shows a `.svc.cluster.local` address instead of a routable hostname or IP, this issue is confirmed.
+If `spec.listeners[].hostname` is empty and `status.addresses` is empty or shows a `.svc.cluster.local` address, this issue is confirmed.
 
-=== Status
+=== Workaround
 
-This is a gap in the maas-api hostname discovery logic. The upstream fix is tracked in the {maas} codebase. If you hit this issue, contact Red Hat support with the output from the diagnosis commands above.
+Set the hostname explicitly on the Gateway listeners. Replace `<cluster-domain>` with your cluster's apps domain:
+
+[source,bash]
+----
+CLUSTER_DOMAIN=$(oc get ingress.config.openshift.io cluster -o jsonpath='{.spec.domain}')
+
+oc patch gateway maas-default-gateway -n openshift-ingress --type=json \
+  -p "[
+    {\"op\": \"add\", \"path\": \"/spec/listeners/0/hostname\", \"value\": \"maas.${CLUSTER_DOMAIN}\"},
+    {\"op\": \"add\", \"path\": \"/spec/listeners/1/hostname\", \"value\": \"maas.${CLUSTER_DOMAIN}\"}
+  ]"
+
+# Restart maas-api to pick up the new hostname
+oc rollout restart deploy/maas-api -n redhat-ai-gateway-infra
+oc rollout status deploy/maas-api -n redhat-ai-gateway-infra --timeout=60s
+----
+
+After the restart, verify the fix:
+
+[source,bash]
+----
+TOKEN=$(oc whoami -t)
+MAAS_URL="https://maas.${CLUSTER_DOMAIN}"
+curl -sk -w "\nHTTP: %{http_code}\n" \
+  -H "Authorization: Bearer ${TOKEN}" \
+  "${MAAS_URL}/maas-api/v1/tenants"
+----
+
+You should see HTTP 200 with the correct `externalUrl` in the response.
 
 [[issue-5]]
 == Issue 5: Payload-Processing OOMKill
@@ -554,7 +596,7 @@ When you hit problems after upgrading from 3.4 to 3.5, check in this order:
 
 | 3
 | Does maas-api report a hostname error? (check logs in `redhat-ai-gateway-infra`)
-| Collect diagnostics for support (<<issue-4,Issue 4>>)
+| Set `spec.listeners[].hostname` on Gateway (<<issue-4,Issue 4>>)
 
 | 4
 | Are payload-processing pods OOMKilled?
@@ -582,6 +624,7 @@ When you hit problems after upgrading from 3.4 to 3.5, check in this order:
 * link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/release_notes/known-issues_relnotes[RHOAI 3.5 Release Notes - Known Issues]
 * link:https://redhat.atlassian.net/browse/RHOAIENG-82694[RHOAIENG-82694 - MCP Lifecycle Operator OOM]
 * link:https://redhat.atlassian.net/browse/RHOAIENG-83207[RHOAIENG-83207 - Gateway namespace label]
+* link:https://redhat.atlassian.net/browse/RHOAIENG-89775[RHOAIENG-89775 - Gateway hostname discovery on ClusterIP+Route]
 * link:https://redhat.atlassian.net/browse/RHOAIENG-88898[RHOAIENG-88898 - Payload-processing OOM]
 * link:https://redhat.atlassian.net/browse/RHOAIENG-76586[RHOAIENG-76586 - RHCL 1.4.x rate limiting]
 * link:https://redhat.atlassian.net/browse/RHOAIENG-71638[RHOAIENG-71638 - WASM auth timeout]
