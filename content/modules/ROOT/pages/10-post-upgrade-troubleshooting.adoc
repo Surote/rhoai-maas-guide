@@ -89,7 +89,7 @@ NOTE: Setting the MCP Lifecycle Operator to `Removed` disables the Model Context
 [[issue-2]]
 == Issue 2: ExternalModel Migration - Secret Names with Dots
 
-*Jira:* No dedicated Jira for this issue.
+*Jira:* To be created soon.
 
 In 3.5, the ExternalModel API moved from `maas.opendatahub.io/v1alpha1` to `inference.opendatahub.io/v1alpha1` as `ExternalProvider`. The new CRD introduces a stricter validation regex on `spec.auth.secretRef.name`:
 
@@ -468,7 +468,7 @@ No workaround exists. This is being tracked as a blocker for RHOAI 3.5 Z-stream 
 [[issue-9]]
 == Issue 9: Token Rate Limiting (429 Too Many Requests)
 
-*Jira:* No dedicated Jira for this issue.
+*Jira:* To be created soon.
 
 The default `tokenRateLimits` in a MaaSSubscription is 1000 tokens per hour. This is easily exhausted with even a single chat conversation. When the limit is hit, all subsequent requests return HTTP 429 `Too Many Requests` - even though the model backend is healthy and has capacity.
 
@@ -535,7 +535,7 @@ NOTE: Do not edit the `TokenRateLimitPolicy` directly - the maas-controller will
 [[issue-10]]
 == Issue 10: Duplicate AI Playground Endpoints (LlamaStackDistribution)
 
-*Jira:* No dedicated Jira for this issue.
+*Jira:* To be created soon.
 
 After upgrading to 3.5 and enabling the `ogx` component in the DSC, the AI Playground may show two provider endpoints for the same model. The MaaS-routed endpoint (`maas-vllm-inference-1/publishers/...`) works, but the default endpoint (`vllm-inference-2/...`) talks directly to the KServe pod and bypasses MaaS auth - failing with connection errors or model-not-found errors depending on timing.
 
@@ -615,6 +615,14 @@ When you hit problems after upgrading from 3.4 to 3.5, check in this order:
 | Increase tokenRateLimits in MaaSSubscription (<<issue-9,Issue 9>>)
 
 | 8
+| RHCL 1.4.x installed? (`oc get csv -n openshift-operators \| grep rhcl`)
+| Pin to 1.3.4 or apply WasmPlugin fix (<<issue-6,Issue 6>>)
+
+| 9
+| ext_proc filter_chain_not_found errors in gateway logs?
+| Install OSSM 3.0.2+ (<<issue-8,Issue 8>>)
+
+| 10
 | Playground shows two endpoints for same model?
 | Delete LlamaStackDistribution (<<issue-10,Issue 10>>)
 |===
