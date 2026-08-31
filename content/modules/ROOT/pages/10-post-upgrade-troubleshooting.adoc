@@ -89,7 +89,7 @@ NOTE: Setting the MCP Lifecycle Operator to `Removed` disables the Model Context
 [[issue-2]]
 == Issue 2: ExternalModel Migration - Secret Names with Dots
 
-*Jira:* To be created soon.
+*Jira:* link:https://redhat.atlassian.net/browse/RHOAIENG-89784[RHOAIENG-89784^]
 
 In 3.5, the ExternalModel API moved from `maas.opendatahub.io/v1alpha1` to `inference.opendatahub.io/v1alpha1` as `ExternalProvider`. The new CRD introduces a stricter validation regex on `spec.auth.secretRef.name`:
 
@@ -468,7 +468,7 @@ No workaround exists. This is being tracked as a blocker for RHOAI 3.5 Z-stream 
 [[issue-9]]
 == Issue 9: Token Rate Limiting (429 Too Many Requests)
 
-*Jira:* To be created soon.
+*Jira:* link:https://redhat.atlassian.net/browse/RHOAIENG-89785[RHOAIENG-89785^]
 
 The default `tokenRateLimits` in a MaaSSubscription is 1000 tokens per hour. This is easily exhausted with even a single chat conversation. When the limit is hit, all subsequent requests return HTTP 429 `Too Many Requests` - even though the model backend is healthy and has capacity.
 
@@ -535,7 +535,7 @@ NOTE: Do not edit the `TokenRateLimitPolicy` directly - the maas-controller will
 [[issue-10]]
 == Issue 10: Duplicate AI Playground Endpoints (LlamaStackDistribution)
 
-*Jira:* To be created soon.
+*Jira:* link:https://redhat.atlassian.net/browse/RHOAIENG-89786[RHOAIENG-89786^]
 
 After upgrading to 3.5 and enabling the `ogx` component in the DSC, the AI Playground may show two provider endpoints for the same model. The MaaS-routed endpoint (`maas-vllm-inference-1/publishers/...`) works, but the default endpoint (`vllm-inference-2/...`) talks directly to the KServe pod and bypasses MaaS auth - failing with connection errors or model-not-found errors depending on timing.
 
@@ -637,4 +637,7 @@ When you hit problems after upgrading from 3.4 to 3.5, check in this order:
 * link:https://redhat.atlassian.net/browse/RHOAIENG-76586[RHOAIENG-76586 - RHCL 1.4.x rate limiting]
 * link:https://redhat.atlassian.net/browse/RHOAIENG-71638[RHOAIENG-71638 - WASM auth timeout]
 * link:https://redhat.atlassian.net/browse/OSSM-15498[OSSM-15498 - Envoy ext_proc body corruption]
+* link:https://redhat.atlassian.net/browse/RHOAIENG-89784[RHOAIENG-89784 - ExternalModel migration and dotted secret names]
+* link:https://redhat.atlassian.net/browse/RHOAIENG-89785[RHOAIENG-89785 - Token rate limiting default too low]
+* link:https://redhat.atlassian.net/browse/RHOAIENG-89786[RHOAIENG-89786 - Duplicate Playground endpoints from leftover LlamaStackDistribution]
 * link:https://redhat.atlassian.net/browse/RHOAIENG-80360[RHOAIENG-80360 - Gateway route hijacking security fix]
