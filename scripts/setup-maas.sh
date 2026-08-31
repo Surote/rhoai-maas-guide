@@ -781,10 +781,12 @@ if should_run 4; then
                 datasciencecluster/default-dsc --timeout=300s 2>/dev/null || \
                 log_warn "KserveReady did not become True within 300s"
 
-            log_info "Waiting for ModelControllerReady condition..."
-            oc wait --for=jsonpath='{.status.conditions[?(@.type=="ModelControllerReady")].status}'=True \
-                datasciencecluster/default-dsc --timeout=300s 2>/dev/null || \
-                log_warn "ModelControllerReady did not become True within 300s"
+            if [ "$IS_35_PLUS" = false ]; then
+                log_info "Waiting for ModelControllerReady condition..."
+                oc wait --for=jsonpath='{.status.conditions[?(@.type=="ModelControllerReady")].status}'=True \
+                    datasciencecluster/default-dsc --timeout=300s 2>/dev/null || \
+                    log_warn "ModelControllerReady did not become True within 300s"
+            fi
 
             if oc get crd maasmodelrefs.maas.opendatahub.io &>/dev/null; then
                 log_info "MaaS CRDs registered"
