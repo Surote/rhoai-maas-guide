@@ -22,6 +22,7 @@
 
 .Reference
 * xref:08-architecture.adoc[Architecture & Request Flow]
+* xref:10-post-upgrade-troubleshooting.adoc[Post-Upgrade Troubleshooting]
 
 .Cleanup
 * xref:09-cleanup.adoc[Cleanup & Teardown]
