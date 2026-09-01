@@ -339,6 +339,12 @@ IMPORTANT: Remove the `opendatahub.io/managed=false` annotation before any futur
 
 Red Hat Connectivity Link (RHCL) 1.4.x changed how the WASM plugin is injected into the gateway. This breaks rate limiting silently - counters that use `auth.identity.user.username` fail because the identity data is not passed into the WASM plugin context. Additionally, the RHCL 1.4 WASM plugin requires more memory to compile, which can cause gateway pods to OOMKill at the default 1Gi limit.
 
+=== Symptoms
+
+* Rate limiting stops working - requests are never throttled even when limits are exceeded
+* Gateway pod OOMKilled at 1Gi memory limit (RHCL 1.4 WASM requires more memory)
+* `TokenRateLimitPolicy` shows `Enforced` but limits have no effect
+
 === Diagnosis
 
 [source,bash]
@@ -397,6 +403,12 @@ Add a `response.success.filters.identity` section to your AuthPolicy so that Aut
 RHCL configures the Kuadrant WASM plugin with a default 200ms Authorino authentication service timeout. Under high concurrent request load, Authorino authentication latency can exceed this threshold due to cache misses. The WASM plugin uses `failureMode: deny`, so timed-out authentication requests result in HTTP 500 or 503 responses even when model backends are healthy.
 
 This affects both {rhoai} 3.4 and 3.5.
+
+=== Symptoms
+
+* HTTP 500 or 503 on inference requests under concurrent load
+* Model pods are healthy with no errors in their logs
+* Gateway Envoy logs show WASM auth timeout errors
 
 === Diagnosis
 
@@ -620,7 +632,7 @@ When you hit problems after upgrading from 3.4 to 3.5, check in this order:
 
 | 9
 | ext_proc filter_chain_not_found errors in gateway logs?
-| Install OSSM 3.0.2+ (<<issue-8,Issue 8>>)
+| No workaround yet, track OSSM update (<<issue-8,Issue 8>>)
 
 | 10
 | Playground shows two endpoints for same model?
