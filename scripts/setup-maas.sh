@@ -675,7 +675,11 @@ if should_run 2; then
     fi
 
     # Label namespace for Gateway route binding (best practice: least privilege)
-    oc label namespace "$MAAS_API_NS" maas.opendatahub.io/gateway-access=true --overwrite 2>/dev/null || true
+    # For 3.5+, skip here - redhat-ai-gateway-infra does not exist yet (created in Phase 4)
+    # and the operator auto-labels it. For 3.4, redhat-ods-applications already exists.
+    if [ "$IS_35_PLUS" = false ]; then
+        oc label namespace "$MAAS_API_NS" maas.opendatahub.io/gateway-access=true --overwrite 2>/dev/null || true
+    fi
 fi
 
 # =============================================================================
@@ -842,6 +846,11 @@ if should_run 4; then
             fi
         done
         [ $ELAPSED -ge $TIMEOUT ] && log_warn "maas-api not found after ${TIMEOUT}s  - operator may still be reconciling"
+    fi
+
+    # Ensure gateway-access label on MaaS API namespace (safety net for 3.5+)
+    if [ "$IS_35_PLUS" = true ] && oc get namespace "$MAAS_API_NS" &>/dev/null; then
+        oc label namespace "$MAAS_API_NS" maas.opendatahub.io/gateway-access=true --overwrite 2>/dev/null || true
     fi
 
     # Verify MaaS readiness (3.5+ uses Config CR, 3.4 uses Tenant CR)
