@@ -317,13 +317,7 @@ Label the namespace where the MaaS API route is created:
 RHOAI 3.5+::
 +
 --
-[source,bash]
-----
-oc label namespace redhat-ai-gateway-infra \
-  maas.opendatahub.io/gateway-access=true --overwrite
-----
-
-In RHOAI 3.5+, the MaaS API route is created in `redhat-ai-gateway-infra`.
+No action needed. The `redhat-ai-gateway-infra` namespace is created and labeled automatically by the RHOAI operator when MaaS is enabled in xref:04-rhoai-config.adoc[Phase 4]. The operator applies `maas.opendatahub.io/gateway-access=true` as part of the namespace setup.
 --
 
 RHOAI 3.4::
