@@ -590,6 +590,93 @@ oc delete pod -n <model-ns> -l app=lsd-genai-playground
 # Add to playground -> select only the model with publishers/ prefix -> Create
 ----
 
+[[issue-11]]
+== Issue 11: OTEL Collector Proxy Interception (Observability Metrics Showing 0)
+
+*Jira:* link:https://redhat.atlassian.net/browse/RHOAIENG-91640[RHOAIENG-91640^]
+
+On clusters behind a corporate HTTP proxy, the RHOAI observability pipeline breaks silently after upgrade. The OTEL collector pods (`data-science-collector-collector-*`) and TargetAllocator (`data-science-collector-targetallocator`) in `redhat-ods-monitoring` inherit the cluster-wide `HTTP_PROXY`/`HTTPS_PROXY` env vars. When the collector tries to reach the TargetAllocator to discover scrape targets, the request goes through the proxy. The proxy returns an HTML page (authentication or redirect), which the collector fails to parse as JSON. With no scrape targets, no metrics reach the RHOAI Prometheus instance, and the MaaS usage dashboard shows 0 for all metrics.
+
+The collector config uses a short hostname to reach the TargetAllocator (`http://data-science-collector-targetallocator:80`). This short hostname has no dots and no `.svc` suffix, so it does not match the `NO_PROXY` entries (`.svc`, `.cluster.local`). Go's `net/http` proxy resolution checks the original hostname against `NO_PROXY` before DNS resolution, so the request gets routed through the corporate proxy.
+
+This does not affect clusters without an HTTP proxy.
+
+=== Symptoms
+
+* MaaS usage dashboard shows 0 for all token metrics
+* OTEL collector logs: `"Failed to retrieve the job list"` with `"unexpected key name <!DOCTYPE html..."`
+* RHOAI Thanos Querier returns "Empty query result" for all metrics (including `authorized_calls_total`, `vllm:num_requests_running`)
+* Limitador metrics are correct when queried directly inside the pod
+
+=== Diagnosis
+
+[source,bash]
+----
+# Check if the cluster uses a proxy
+oc get proxy/cluster -o jsonpath='{.spec.httpProxy}'
+
+# Check OTEL collector logs for HTML parse errors
+oc logs -n redhat-ods-monitoring data-science-collector-collector-0 \
+  | grep -i "Failed to retrieve"
+
+# Check if TargetAllocator has proxy env vars
+oc get deploy data-science-collector-targetallocator -n redhat-ods-monitoring \
+  -o jsonpath='{.spec.template.spec.containers[0].env[*].name}' | tr ' ' '\n' | grep -i proxy
+
+# Verify TargetAllocator returns JSON (not HTML) when accessed directly
+oc exec -n redhat-ods-monitoring data-science-collector-collector-0 -- \
+  curl -s http://data-science-collector-targetallocator:8080/jobs | head -1
+----
+
+If the last command returns HTML (`<!DOCTYPE html...`) instead of JSON, this issue is confirmed.
+
+=== Workaround
+
+Patch the `OpenTelemetryCollector` CR to override the proxy env vars to empty on both the collector and TargetAllocator:
+
+[source,bash]
+----
+oc patch opentelemetrycollector data-science-collector -n redhat-ods-monitoring --type=merge -p '{
+  "spec": {
+    "env": [
+      {"name": "HTTP_PROXY", "value": ""},
+      {"name": "HTTPS_PROXY", "value": ""},
+      {"name": "http_proxy", "value": ""},
+      {"name": "https_proxy", "value": ""}
+    ],
+    "targetAllocator": {
+      "env": [
+        {"name": "HTTP_PROXY", "value": ""},
+        {"name": "HTTPS_PROXY", "value": ""},
+        {"name": "http_proxy", "value": ""},
+        {"name": "https_proxy", "value": ""}
+      ]
+    }
+  }
+}'
+----
+
+Wait for the pods to restart:
+
+[source,bash]
+----
+oc rollout status deployment/data-science-collector-targetallocator -n redhat-ods-monitoring --timeout=60s
+oc rollout status statefulset/data-science-collector-collector -n redhat-ods-monitoring --timeout=120s
+----
+
+Verify the collector discovers scrape jobs:
+
+[source,bash]
+----
+oc logs -n redhat-ods-monitoring data-science-collector-collector-0 --tail=20 | grep "Scrape job added"
+----
+
+You should see scrape jobs listed (e.g., `serviceMonitor/redhat-ods-monitoring/limitador-metrics/0`).
+
+IMPORTANT: Do NOT use `oc set env statefulset/...` or `oc set env deployment/...` directly. The OTel operator reconciles the StatefulSet and Deployment from the CR spec, so manual env changes get reverted immediately. You must patch the `OpenTelemetryCollector` CR itself.
+
+WARNING: The RHOAI operator manages the `OpenTelemetryCollector` CR and may revert changes on reconciliation. If that happens, annotate the CR to prevent operator management: `oc annotate opentelemetrycollector data-science-collector -n redhat-ods-monitoring opendatahub.io/managed=false`. Remove this annotation before any future {rhoai} upgrades.
+
 == Quick Reference: Triage Order
 
 When you hit problems after upgrading from 3.4 to 3.5, check in this order:
@@ -637,6 +724,10 @@ When you hit problems after upgrading from 3.4 to 3.5, check in this order:
 | 10
 | Playground shows two endpoints for same model?
 | Delete LlamaStackDistribution (<<issue-10,Issue 10>>)
+
+| 11
+| Cluster behind HTTP proxy and observability metrics show 0? (`oc get proxy/cluster -o jsonpath='{.spec.httpProxy}'`)
+| Override proxy env vars via OpenTelemetryCollector CR (<<issue-11,Issue 11>>)
 |===
 
 == References
@@ -652,4 +743,5 @@ When you hit problems after upgrading from 3.4 to 3.5, check in this order:
 * link:https://redhat.atlassian.net/browse/RHOAIENG-89784[RHOAIENG-89784 - ExternalModel migration and dotted secret names]
 * link:https://redhat.atlassian.net/browse/RHOAIENG-89785[RHOAIENG-89785 - Token rate limiting default too low]
 * link:https://redhat.atlassian.net/browse/RHOAIENG-89786[RHOAIENG-89786 - Duplicate Playground endpoints from leftover LlamaStackDistribution]
+* link:https://redhat.atlassian.net/browse/RHOAIENG-91640[RHOAIENG-91640 - OTEL collector proxy interception breaks observability]
 * link:https://redhat.atlassian.net/browse/RHOAIENG-80360[RHOAIENG-80360 - Gateway route hijacking security fix]
