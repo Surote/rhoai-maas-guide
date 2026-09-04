@@ -232,7 +232,8 @@ Now create the Gateway. The Gateway template includes `spec.infrastructure.param
 ----
 export CLUSTER_DOMAIN=$(oc get ingresses.config.openshift.io cluster \
   -o jsonpath='{.spec.domain}')
-echo $CLUSTER_DOMAIN
+export MAAS_HOSTNAME="maas.${CLUSTER_DOMAIN}"
+echo $MAAS_HOSTNAME
 ----
 
 [source,bash]
@@ -246,7 +247,7 @@ echo $CERT_NAME
 
 [source,bash]
 ----
-envsubst '${CLUSTER_DOMAIN} ${CERT_NAME}' < manifests/02-platform-config/gateway.yaml.tmpl | oc apply -f -
+envsubst '${MAAS_HOSTNAME} ${CERT_NAME}' < manifests/02-platform-config/gateway.yaml.tmpl | oc apply -f -
 ----
 
 *Step 5c:* Annotate the Gateway for Authorino TLS bootstrap:
@@ -350,8 +351,9 @@ NOTE: If your platform type from Step 5a was `AWS`, `Azure`, `GCP`, or another c
 ----
 export CLUSTER_DOMAIN=$(oc get ingresses.config.openshift.io cluster \
   -o jsonpath='{.spec.domain}')
+export MAAS_HOSTNAME="maas.${CLUSTER_DOMAIN}"
 
-envsubst '${CLUSTER_DOMAIN}' < manifests/03-maas-platform/openshift-gateway-setup/route.yaml.tmpl | oc apply -f -
+envsubst '${MAAS_HOSTNAME}' < manifests/03-maas-platform/openshift-gateway-setup/route.yaml.tmpl | oc apply -f -
 ----
 
 [NOTE]
