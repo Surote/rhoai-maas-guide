@@ -16,6 +16,7 @@ spec:
     genAiStudio: true
     modelAsService: true
     observabilityDashboard: true
+    externalModels: true
   hardwareProfileOrder: []
   notebookController:
     enabled: true
