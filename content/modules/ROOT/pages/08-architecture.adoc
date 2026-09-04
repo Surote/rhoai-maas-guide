@@ -119,19 +119,19 @@ The full inference flow as a sequence diagram, showing every component interacti
 
 == Interactive Flow Visualizer
 
-To see all of the above in action, explore the interactive animated visualizer — it walks through 4 complete flows (including auth failures and rate limiting) step by step with clickable components and a request/response inspector.
+To see all of the above in action, explore the interactive animated visualizer — it walks through 5 complete flows (including auth failures and rate limiting) step by step with clickable components and a request/response inspector.
+
+For pod-by-pod debugging with `oc` commands, see xref:08b-request-deepdive.adoc[Request Deep Dive].
 
 [NOTE]
 ====
-link:https://noyitz.github.io/ai-gateway-docs/ai-gateway-flow.html[*Open the AI Inference Gateway Flow Visualizer*^] (opens in a new tab)
-
-_4 Flows | 5 Providers | 35 Steps | 30+ Components_ +
-Built by link:https://github.com/noyitz[Noy Itzikowitz^]
+link:{attachmentsdir}/flow.html[*Open the RHOAI 3.5 Flow Visualizer*^] (opens in a new tab) +
+_5 Flows | 5 Providers | Two-stage IPP | 33 Steps | 30+ Components_ +
+Corrected two-stage IPP (pre/post Kuadrant), WasmPlugin CRs, ExternalProvider/ExternalModel split, ipp-managed label, redhat-ai-gateway-infra namespace.
 ====
 
 == References
 
 * link:https://opendatahub-io.github.io/models-as-a-service/latest/concepts/architecture/[Upstream MaaS Architecture]
-* link:https://noyitz.github.io/ai-gateway-docs/ai-gateway-flow.html[AI Gateway Flow Visualizer]
+* link:{attachmentsdir}/flow.html[RHOAI 3.5 Flow Visualizer (two-stage IPP)]
 * link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/govern_llm_access_with_models-as-a-service/index[RHOAI 3.5 MaaS Official Docs]
-* link:https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.4/html/govern_llm_access_with_models-as-a-service/index[RHOAI 3.4 MaaS Official Docs]
