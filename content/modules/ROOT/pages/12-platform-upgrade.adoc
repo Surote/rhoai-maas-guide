@@ -107,6 +107,15 @@ oc patch datasciencecluster default-dsc --type=merge \
 
 NOTE: Without `ogx`, the AI Playground section will not appear in the Dashboard. The old `llamastackoperator` field can be left as-is in the DSC - it is ignored in 3.5.
 
+WARNING: On some RHOAI 3.5.0 installations, the OGX CRD may not be available yet. If the DSC reports `OGXReady: False` with `no matches for kind "OGX"` after this step, set ogx back to `Removed` to unblock the DSC. This does not affect {maas} functionality - only the AI Playground feature.
+
+[source,bash]
+----
+# Only if OGX is blocking DSC Ready:
+oc patch datasciencecluster default-dsc --type=merge \
+  -p '{"spec":{"components":{"ogx":{"managementState":"Removed"}}}}'
+----
+
 == Step 4: Handle the Frozen kserve.modelsAsService Field
 
 The old `kserve.modelsAsService` field is frozen by CEL validation (`self == oldSelf`). You cannot change its value in-place. This is by design - it prevents accidental removal of a running {maas} configuration during the transition period.
