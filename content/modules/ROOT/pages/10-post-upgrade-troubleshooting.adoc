@@ -257,7 +257,11 @@ If `spec.listeners[].hostname` is empty and `status.addresses` is empty or shows
 
 === Workaround
 
-Set the hostname explicitly on the Gateway listeners. Replace `<cluster-domain>` with your cluster's apps domain:
+Set the hostname explicitly on the Gateway listeners. This workaround is confirmed for passthrough routes. For re-encrypt routes, additional adjustments may be needed - check the link:https://redhat.atlassian.net/browse/RHOAIENG-89775[Jira ticket^] comments for the latest guidance.
+
+NOTE: The {maas} team recommends re-encrypt routes over passthrough when using cluster wildcard default domain certs, to avoid HTTP coalescing issues.
+
+Replace `<cluster-domain>` with your cluster's apps domain:
 
 [source,bash]
 ----
