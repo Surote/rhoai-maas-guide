@@ -10,7 +10,7 @@ IMPORTANT: This guide is not a replacement for the official {rhoai} {maas} docum
 
 == Prerequisites
 
-* OpenShift 4.17+ cluster with `oc` CLI authenticated as cluster-admin
+* OpenShift 4.19+ cluster with `oc` CLI authenticated as cluster-admin
 * Red Hat Connectivity Link (RHCL) operator already installed (see link:https://docs.redhat.com/en/documentation/red_hat_connectivity_link[RHCL docs])
 * xref:01-prerequisites.adoc[Phase 1] (operators) completed
 
@@ -266,6 +266,7 @@ oc wait --for=condition=Programmed gateway/maas-default-gateway \
   -n openshift-ingress --timeout=120s
 ----
 
+[[_gateway_pod_oomkill_prevention]]
 [NOTE]
 ====
 *Gateway Pod OOMKill Prevention*

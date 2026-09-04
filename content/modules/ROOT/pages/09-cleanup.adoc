@@ -4,7 +4,7 @@ Remove {maas} and its dependencies from your OpenShift cluster.
 
 == Automated Cleanup
 
-The cleanup script reverses `setup-maas.sh` in reverse order, checking whether each resource exists before deleting.
+The cleanup script undoes `setup-maas.sh` in reverse order, checking whether each resource exists before deleting.
 
 [source,bash]
 ----
