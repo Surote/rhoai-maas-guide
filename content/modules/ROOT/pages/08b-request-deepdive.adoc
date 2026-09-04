@@ -51,7 +51,11 @@ oc get envoyfilters -n openshift-ingress
 
 Every component lives in a specific namespace. Here is the full layout for RHOAI 3.5:
 
-image::deepdive-namespace-map.svg[RHOAI 3.5 namespace map,width=100%]
+++++
+<div style="overflow-x:auto;max-width:100%">
+<img src="_images/deepdive-namespace-map.svg" alt="RHOAI 3.5 namespace map" style="min-width:1000px;width:100%" />
+</div>
+++++
 
 [cols="2,3,3", options="header"]
 |===
@@ -103,7 +107,11 @@ oc get pods -n kuadrant-system
 
 === External Model Request (e.g., Anthropic)
 
-image::deepdive-external-model.svg[External model request sequence,width=100%]
+++++
+<div style="overflow-x:auto;max-width:100%">
+<img src="_images/deepdive-external-model.svg" alt="External model request sequence" style="min-width:1100px;width:100%" />
+</div>
+++++
 
 [cols="1,2,2,3,3", options="header"]
 |===
@@ -184,7 +192,11 @@ image::deepdive-external-model.svg[External model request sequence,width=100%]
 
 === Internal Model Request (P/D Disaggregated)
 
-image::deepdive-pd-disaggregated.svg[Internal Model P/D disaggregated sequence,width=100%]
+++++
+<div style="overflow-x:auto;max-width:100%">
+<img src="_images/deepdive-pd-disaggregated.svg" alt="Internal Model P/D disaggregated sequence" style="min-width:900px;width:100%" />
+</div>
+++++
 
 After step 16 (IPP Post returns to Gateway), the internal model flow diverges:
 
@@ -225,7 +237,11 @@ After step 16 (IPP Post returns to Gateway), the internal model flow diverges:
 
 == Key Configuration Resources
 
-image::deepdive-crd-hierarchy.svg[CRD relationship hierarchy,width=100%]
+++++
+<div style="overflow-x:auto;max-width:100%">
+<img src="_images/deepdive-crd-hierarchy.svg" alt="CRD relationship hierarchy" style="min-width:1000px;width:100%" />
+</div>
+++++
 
 These are the ConfigMaps, Secrets, and CRDs that control the request flow:
 
@@ -300,7 +316,11 @@ oc get aitenant -A
 
 == Common Debugging Scenarios
 
-image::deepdive-debugging.svg[Debugging decision tree,width=100%]
+++++
+<div style="overflow-x:auto;max-width:100%">
+<img src="_images/deepdive-debugging.svg" alt="Debugging decision tree" style="min-width:800px;width:100%" />
+</div>
+++++
 
 === 500 Error on External Model
 
@@ -368,7 +388,11 @@ oc logs -n openshift-ingress deploy/payload-pre-processing | grep -i "model\|hea
 
 == RHOAI 3.4 vs 3.5 Differences
 
-image::deepdive-34-vs-35.svg[RHOAI 3.4 vs 3.5 architecture comparison,width=100%]
+++++
+<div style="overflow-x:auto;max-width:100%">
+<img src="_images/deepdive-34-vs-35.svg" alt="RHOAI 3.4 vs 3.5 architecture comparison" style="min-width:700px;width:100%" />
+</div>
+++++
 
 If you are debugging a 3.4 cluster, these are the key differences:
 
