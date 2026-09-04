@@ -5,12 +5,14 @@ on:
     branches: [main]
     paths:
       - 'content/**'
+      - 'supplemental-ui/**'
       - 'site.yml'
       - '.github/workflows/gh-pages.yml'
   pull_request:
     branches: [main]
     paths:
       - 'content/**'
+      - 'supplemental-ui/**'
       - 'site.yml'
       - '.github/workflows/gh-pages.yml'
   workflow_dispatch:
