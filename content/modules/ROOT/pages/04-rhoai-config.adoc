@@ -98,7 +98,7 @@ With the Data Science Cluster created we can now apply the dashboard configurati
 oc apply -f manifests/04-rhoai-config/odh-dashboard-config.yaml
 ----
 
-NOTE: On subsequent runs (CRDs already exist), `oc apply -k manifests/04-rhoai-config/` works in one shot.
+NOTE: On subsequent runs (CRDs already exist), `oc apply -k manifests/04-rhoai-config/` works in one shot. The kustomization includes the 3.5+ DSC by default - for RHOAI 3.4, apply the individual files as shown above.
 
 == Verify
 
@@ -204,8 +204,9 @@ oc get odhdashboardconfig odh-dashboard-config -n redhat-ods-applications \
 Verify the following flags are set:
 
 * `modelAsService: true` - enables the Models as a Service tab
-* `genAiStudio: true` - enables the GenAI Studio tab (requires llamastackoperator Managed)
+* `genAiStudio: true` - enables the GenAI Studio tab (requires `ogx` Managed on 3.5+ or `llamastackoperator` Managed on 3.4)
 * `observabilityDashboard: true` - enables the Observability tab (requires COO + monitoring configured)
+* `externalModels: true` - enables surfacing regular model deployments as AI asset endpoints alongside MaaS models
 
 NOTE: The `maasAuthPolicies` flag was removed from the OdhDashboardConfig CRD in RHOAI 3.5. Do not include it in the manifest - the admission webhook will reject it.
 

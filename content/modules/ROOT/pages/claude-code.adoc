@@ -6,7 +6,7 @@ The skill works with any AI coding tool that supports skill definitions:
 
 * link:https://claude.ai/code[Claude Code] / link:https://opencode.ai[Open Code]
 * link:https://cursor.com[Cursor]
-* link:https://roosoft.com[Roo Code]
+* link:https://roocode.com[Roo Code]
 * Other AI coding agents with skill support
 
 TIP: All file paths and `oc apply` commands in this guide are relative to the link:{repo-url}[rhoai-maas-guide] repository root. Make sure you have cloned it and are working from its root directory (see xref:index.adoc#_getting_started[Getting Started]).

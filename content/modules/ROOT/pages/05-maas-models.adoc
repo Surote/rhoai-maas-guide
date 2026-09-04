@@ -12,7 +12,7 @@ IMPORTANT: This guide is not a replacement for the official {rhoai} {maas} docum
 * MaaS Gateway available in `openshift-ingress` namespace
 * `maas-api` and `maas-controller` pods running (in `redhat-ai-gateway-infra` on RHOAI 3.5+, or `redhat-ods-applications` on 3.4)
 
-IMPORTANT: GPU models use FP8 quantization, which requires NVIDIA GPUs with compute capability >= 80 (Ampere architecture or newer). T4 GPUs (compute capability 75) and A10G GPUs are *not supported* with the current vLLM version. Use L4, L40, L40S, A100, or H100 GPUs.
+IMPORTANT: GPU models use FP8 quantization, which requires NVIDIA GPUs with compute capability >= 80 (Ampere architecture or newer). T4 GPUs (compute capability 75) are *not supported* with the current vLLM version. Use A10G, L4, L40, L40S, A100, or H100 GPUs.
 
 == Available Models
 
@@ -29,7 +29,7 @@ A CPU-only mock LLM that requires no GPU. It uses the `llm-d-inference-sim` cont
 
 Red Hat AI Granite 4.0-h-tiny FP8 Dynamic, a small Granite model (~1B parameters) running on the Red Hat AI Inference Server (vLLM CUDA). Suitable for clusters with modest GPU resources.
 
-* *Runtime*: vLLM CUDA (registry.redhat.io/rhaiis/vllm-cuda-rhel9:3.3.0)
+* *Runtime*: vLLM CUDA (registry.redhat.io/rhaii/vllm-cuda-rhel9:3.3.0)
 * *Model weights*: OCI modelcar from registry.redhat.io
 * *Resources*: 2-4 CPU, 8Gi-24Gi memory, 1x NVIDIA GPU
 * *GPU memory*: ~8GB required
@@ -39,7 +39,7 @@ Red Hat AI Granite 4.0-h-tiny FP8 Dynamic, a small Granite model (~1B parameters
 
 Google Gemma 2 9B IT FP8 running on the Red Hat AI Inference Server (vLLM CUDA). A 9B parameter instruction-tuned model with FP8 quantization, suitable for general-purpose text generation and code tasks. Fits on a single L4 GPU (24GB VRAM).
 
-* *Runtime*: vLLM CUDA (registry.redhat.io/rhaiis/vllm-cuda-rhel9:3.3.0)
+* *Runtime*: vLLM CUDA (registry.redhat.io/rhaii/vllm-cuda-rhel9:3.3.0)
 * *Model weights*: OCI modelcar `registry.redhat.io/rhelai1/modelcar-gemma-2-9b-it-fp8:1.5`
 * *Resources*: 2-4 CPU, 8Gi-24Gi memory, 1x NVIDIA GPU
 * *GPU memory*: ~12GB required (FP8 quantized)
@@ -52,7 +52,7 @@ NOTE: Gemma is a US-origin model, making it suitable for deployments with export
 
 OpenAI gpt-oss-20b running on the Red Hat AI Inference Server (vLLM CUDA). Requires a capable GPU node (L4 or better) with sufficient VRAM.
 
-* *Runtime*: vLLM CUDA (registry.redhat.io/rhaiis/vllm-cuda-rhel9:3.3.0)
+* *Runtime*: vLLM CUDA (registry.redhat.io/rhaii/vllm-cuda-rhel9:3.3.0)
 * *Model weights*: OCI modelcar from registry.redhat.io (~8GB download)
 * *Resources*: 2-4 CPU, 16Gi-60Gi memory, 1x NVIDIA GPU
 * *GPU memory*: ~16GB required

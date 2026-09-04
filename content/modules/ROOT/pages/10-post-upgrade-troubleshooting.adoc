@@ -149,7 +149,7 @@ metadata:
   namespace: <model-ns>
 spec:
   endpoint: "your-provider-endpoint.com"
-  provider: "openai"  # or anthropic, azure, aws-bedrock, vertex
+  provider: "openai"  # or anthropic, azure-openai, bedrock-openai
   auth:
     type: apikey
     secretRef:

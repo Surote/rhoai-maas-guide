@@ -45,7 +45,7 @@ oc create secret generic maas-db-config \
   --from-literal=DB_CONNECTION_URL="postgresql://maas:${POSTGRES_PASSWORD}@postgres:5432/maas?sslmode=disable"
 ----
 
-NOTE: On RHOAI 3.5+, the `maas-api` deployment runs in `redhat-ai-gateway-infra`. The `maas-db-config` secret must also exist in that namespace. The `setup-maas.sh` script handles this mirroring automatically. If installing manually, create the same secret in `redhat-ai-gateway-infra` after the one above.
+NOTE: On RHOAI 3.5+, the `maas-api` deployment runs in `redhat-ai-gateway-infra`. The `maas-db-config` secret must also exist in that namespace. When creating the cross-namespace copy, use the fully-qualified service hostname `postgres.redhat-ods-applications.svc:5432` in the `DB_CONNECTION_URL` instead of the short name `postgres:5432` (which won't resolve from a different namespace). The `setup-maas.sh` script handles this mirroring automatically. If installing manually, create the same secret in `redhat-ai-gateway-infra` after the one above.
 
 === Step 2: Deploy PostgreSQL
 

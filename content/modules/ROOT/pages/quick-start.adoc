@@ -160,6 +160,21 @@ Or use the standalone model script for more control:
 ./scripts/deploy-model.sh --model simulator
 ----
 
+=== With external OIDC authentication
+
+After the base installation, add Keycloak-based OIDC authentication so users can access MaaS with their corporate credentials instead of OpenShift tokens:
+
+[source,bash]
+----
+# Deploy Keycloak + configure MaaS for OIDC
+./manifests/09-external-oidc/setup-keycloak.sh
+
+# Verify the OIDC flow (tokens, API keys, inference, group access)
+./manifests/09-external-oidc/test-external-oidc.sh
+----
+
+See xref:09-external-oidc.adoc[Phase 9: External OIDC Authentication] for the full manual walkthrough and Bring Your Own IdP instructions.
+
 === Verify only
 
 [source,bash]
@@ -190,6 +205,12 @@ These wrap individual phases for standalone use:
 
 | `scripts/verify-maas.sh`
 | Phase 6 only - wrapper for `manifests/06-verification/verify.sh`
+
+| `manifests/09-external-oidc/setup-keycloak.sh`
+| Phase 9 - deploy Keycloak + configure OIDC on the MaaS tenant (`--cleanup` to revert)
+
+| `manifests/09-external-oidc/test-external-oidc.sh`
+| Phase 9 verification - 6-test OIDC flow (tokens, API keys, inference, group access)
 |===
 
 == State Detection
@@ -206,7 +227,7 @@ Override with `--from-phase N` to force re-running from a specific phase.
 
 == AI-Assisted Installation
 
-If you use an AI coding tool (link:https://claude.ai/code[Claude Code], link:https://opencode.ai[Open Code], link:https://cursor.com[Cursor], link:https://roosoft.com[Roo Code]), the `/install-maas` skill wraps the same script with an interactive, AI-assisted workflow. Clone the repo, open it in your tool, and run:
+If you use an AI coding tool (link:https://claude.ai/code[Claude Code], link:https://opencode.ai[Open Code], link:https://cursor.com[Cursor], link:https://roocode.com[Roo Code]), the `/install-maas` skill wraps the same script with an interactive, AI-assisted workflow. Clone the repo, open it in your tool, and run:
 
 [source]
 ----
